@@ -482,6 +482,9 @@ function upgradeOne(input) {
   // A control that runs through zero reads from twelve o'clock — the silverbox's
   // tuning and the hexop's pitch envelope are the whole point of the variant.
   if (min < 0 && max > 0) wrap.dataset.bipolar = "1";
+  // `data-knob-shape="dial"` keeps a knob a dial on a phone too (style.css's
+  // phone skin skips `.sq-knob--dial`): the transport's swing, beside play.
+  if (input.dataset.knobShape === "dial") wrap.classList.add("sq-knob--dial");
   const dial = document.createElement("span");
   dial.className = "sq-knob__dial";
   dial.setAttribute("aria-hidden", "true");

@@ -334,9 +334,10 @@ input[type="range"] { accent-color: var(--accent); }
 
    Sizing: --knob-size is the bar's column width (the mobile rules already set
    it to 40-44px per context, and that is the width the target needs anyway);
-   --knob-len is its height and --knob-bar the width of the drawn track. */
+   --knob-len is its height and --knob-bar the width of the drawn track.
+   A knob marked `.sq-knob--dial` (knob.js, from data-knob-shape) stays a dial. */
 @media (pointer: coarse), (max-width: 768px) {
-  .sq-knob {
+  .sq-knob:not(.sq-knob--dial) {
     --knob-len: 72px;
     --knob-bar: 14px;
     height: var(--knob-len);
@@ -344,7 +345,7 @@ input[type="range"] { accent-color: var(--accent); }
   /* The track. Inset 3px top and bottom so the thumb, centred ON the value,
      has somewhere to sit at 0 and at 100 without leaving the wrapper. Its
      height is therefore the whole travel, which is what knob.js measures. */
-  .sq-knob > .sq-knob__dial {
+  .sq-knob:not(.sq-knob--dial) > .sq-knob__dial {
     inset: 3px auto;
     left: 50%;
     width: var(--knob-bar);
@@ -365,11 +366,11 @@ input[type="range"] { accent-color: var(--accent); }
     mask: none;
   }
   /* No body: a bar has no mass to draw. */
-  .sq-knob__dial::before { content: none; }
+  .sq-knob:not(.sq-knob--dial) > .sq-knob__dial::before { content: none; }
   /* The thumb — a bar across the track, wider than it, centred on the value.
      `(1 - v) * 100%` because CSS measures from the top and the slider from
      the bottom. */
-  .sq-knob__dial::after {
+  .sq-knob:not(.sq-knob--dial) > .sq-knob__dial::after {
     left: 50%;
     top: calc((1 - var(--knob-v, 0)) * 100%);
     width: calc(var(--knob-bar) + 10px);
@@ -382,7 +383,7 @@ input[type="range"] { accent-color: var(--accent); }
     transform: translateY(-50%);
   }
   /* Through-zero controls fill from the middle, as the dial does from twelve. */
-  .sq-knob[data-bipolar] .sq-knob__dial {
+  .sq-knob:not(.sq-knob--dial)[data-bipolar] .sq-knob__dial {
     background:
       linear-gradient(to top,
         var(--knob-track) 0%,
@@ -394,14 +395,14 @@ input[type="range"] { accent-color: var(--accent); }
   }
   /* The target covers the whole column: the bar's height, and never less than
      the 44px the hit rule asks for across. */
-  .sq-knob input[type="range"] {
+  .sq-knob:not(.sq-knob--dial) input[type="range"] {
     width: max(var(--knob-size), var(--knob-hit));
     height: max(var(--knob-len), var(--knob-hit));
   }
   /* The second needle, where an lfo or a lane has pushed the parameter: a
      thinner, wider marker in the motion colour, on the same scale as the
      thumb. It sits on the wrapper, so the 3px track inset is applied here. */
-  .sq-knob[data-moving]::after {
+  .sq-knob:not(.sq-knob--dial)[data-moving]::after {
     left: 50%;
     top: calc(3px + (1 - var(--knob-m, 0)) * (100% - 6px));
     width: calc(var(--knob-bar) + 18px);
@@ -411,11 +412,11 @@ input[type="range"] { accent-color: var(--accent); }
     transform-origin: 50% 50%;
     transform: translateY(-50%);
   }
-  .sq-knob:has(input:focus-visible) .sq-knob__dial { border-color: var(--accent-2); }
+  .sq-knob:not(.sq-knob--dial):has(input:focus-visible) .sq-knob__dial { border-color: var(--accent-2); }
   /* Denser contexts get a shorter bar. The hexop's 6x8 operator grid is six
      rows of these; the transport bar has the play button beside its one. */
-  .sq-hexop__ops .sq-hexop__f .sq-knob { --knob-len: 56px; }
-  .sq-transport .sq-knob { --knob-len: 48px; }
+  .sq-hexop__ops .sq-hexop__f .sq-knob:not(.sq-knob--dial) { --knob-len: 56px; }
+  .sq-transport .sq-knob:not(.sq-knob--dial) { --knob-len: 48px; }
 }
 
 /* Fields hold a wide slider beside their label; a knob is square, so the label
@@ -3464,18 +3465,33 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }
 
+  /* The play row: logo, play taking what the line has spare, then bpm and the
+     swing dial as two equal columns, each with its label underneath, so the
+     row is one height (the play button's) with nothing hanging above it.
+     bpm is a dial here (#bpm-dial, mirroring the hidden number field). */
   .sq-transport button.sq-play {
+    flex: 1 1 auto;
     min-width: 76px;
-    min-height: 44px;
+    min-height: 52px;
     padding: 9px 14px;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .sq-transport .sq-field { gap: 4px; }
-  .sq-transport .sq-field label { font-size: 10px; }
-  .sq-transport input[type="number"] { width: 56px; min-height: 40px; padding: 5px 6px; }
-  .sq-transport .sq-knob { --knob-size: 42px; }
+  .sq-transport .sq-field label { font-size: 10px; line-height: 1.1; }
+  .sq-transport .sq-field:has(> #bpm) { display: none; }   /* the dial below stands in for it */
+  .sq-transport .sq-bpm-dial,
+  .sq-transport .sq-field:has(#swing) {
+    flex-direction: column-reverse;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 58px;
+    height: 52px;
+  }
+  .sq-transport input[type="number"] { width: 58px; min-height: 36px; padding: 4px 6px; text-align: center; font-size: 15px; }
+  .sq-transport .sq-knob { --knob-size: 36px; }
   /* The transport's own icon buttons (metronome, note colours) to the same
      floor everything else in reach of a thumb gets. */
   .sq-transport .sq-icon-btn { min-width: 44px; height: 40px; }
@@ -3565,8 +3581,15 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     flex: 1 1 100%;
     order: 200;
     min-width: 0;
+    margin: 0;
+    padding: 0 2px;
     text-align: left;
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 1.3;
+    color: var(--fg-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .sq-meter--master { width: 50px; height: 8px; }
   .sq-beat-indicator { width: 30px; height: 30px; }

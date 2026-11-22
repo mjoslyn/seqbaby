@@ -683,6 +683,38 @@ export function init() {
   // a number input only opens the numeric keypad, so let users drag up/down to
   // scrub the value. A clean tap still focuses the input to type a value.
   attachBpmDrag(document.getElementById("bpm"));
+  // On a phone the tempo is a dial (#bpm-dial) beside the hidden number field.
+  // #bpm stays the value everything reads; the dial writes it through its
+  // own input event, and every write to #bpm (a session load, the mix, vim)
+  // reaches the dial because its value accessor is shadowed here, the way
+  // knob.js shadows the ranges.
+  {
+    const field = /** @type {HTMLInputElement} */ (document.getElementById("bpm"));
+    const dial = /** @type {HTMLInputElement|null} */ (document.getElementById("bpm-dial"));
+    const lbl = dial?.closest(".sq-field")?.querySelector("label");
+    if (dial) {
+      const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      const mirror = (v) => {
+        const n = Math.round(Number(v));
+        if (Number.isFinite(n)) dial.value = String(n);
+        if (lbl) lbl.textContent = `${Number.isFinite(n) ? n : v} bpm`;
+      };
+      Object.defineProperty(field, "value", {
+        configurable: true,
+        get() { return desc.get.call(this); },
+        set(v) { desc.set.call(this, v); mirror(v); },
+      });
+      field.addEventListener("input", () => mirror(field.value));
+      dial.addEventListener("input", () => {
+        if (field.value === dial.value) return;
+        desc.set.call(field, dial.value);
+        if (lbl) lbl.textContent = `${dial.value} bpm`;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      mirror(field.value);
+    }
+  }
   // Right-click any parameter control → its mods + automation lanes. One
   // delegated listener covers every track, now and after any rebuild.
   installParamContextMenu();

@@ -626,7 +626,9 @@ export const STUDIO_BODY = String.raw`
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record notes and knob moves" title="record computer-keyboard notes into the active track, and knob moves into their automation lanes, while the transport plays"></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="write the notes you just played into the active track, after the fact"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
-    <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    <!-- Phone only: the tempo as a dial, mirroring #bpm both ways (main.js). -->
+    <div class="sq-field sq-mobile-only sq-bpm-dial"><label for="bpm-dial">110 bpm</label><input id="bpm-dial" data-knob-shape="dial" type="range" min="40" max="240" step="1" value="110" aria-label="bpm" /></div>
+    <div class="sq-field"><label for="swing">swing</label><input id="swing" data-knob-shape="dial" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
