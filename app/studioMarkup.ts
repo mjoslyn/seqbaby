@@ -323,7 +323,7 @@ const LADDER_PANEL = `
             <span class="sq-ladder__osc-lbl">filter</span>
             <label class="sq-ladder__freq"><span>attack</span><input class="p-ldrfatk" type="range" min="0" max="1" step="0.01" value="0" title="the filter contour's attack, 1ms to 10s" /></label>
             <label class="sq-ladder__freq"><span>decay</span><input class="p-ldrfdec" type="range" min="0" max="1" step="0.01" value="0.45" title="the filter contour's decay, 6ms to 12s. Its release too, while the decay switch is on" /></label>
-            <label class="sq-ladder__freq"><span>sustain</span><input class="p-ldrfsus" type="range" min="0" max="1" step="0.01" value="0.3" title="where the filter contour settles while the note is held" /></label>
+            <label class="sq-ladder__freq"><span>sustain</span><input class="p-ldrfsus" type="range" min="0" max="1" step="0.01" value="0.6" title="where the filter contour settles while the note is held" /></label>
           </div>
           <div class="sq-ladder__osc-row">
             <span class="sq-ladder__osc-lbl">loud</span>

@@ -184,7 +184,7 @@ class Voice {
     // this block's filter constants
     this.g = 0.1; this.k = 0; this.mk = 1;
     this.attC = 1; this.decC = 0; this.relC = 0; this.susL = 0.75;
-    this.fattC = 1; this.fdecC = 0; this.frelC = 0; this.fsusL = 0.3;
+    this.fattC = 1; this.fdecC = 0; this.frelC = 0; this.fsusL = 0.6;
   }
   active() { return this.stage !== 0; }
   reset() {
@@ -204,7 +204,7 @@ class LadderProcessor extends AudioWorkletProcessor {
       k("osc1", 0.55), k("osc2", 0.45), k("osc3", 0.35), k("noise", 0),
       k("osc2freq", 0, -7, 7), k("osc3freq", 0, -7, 7),
       // The panel.
-      k("fatk", 0), k("fdec", 0.45), k("fsus", 0.3), k("atk", 0.05), k("sus", 0.75),
+      k("fatk", 0), k("fdec", 0.45), k("fsus", 0.6), k("atk", 0.05), k("sus", 0.75),
       k("mod", 0), k("modmix", 0), k("drift", 0.25), k("tune", 0, -1, 1),
     ];
   }

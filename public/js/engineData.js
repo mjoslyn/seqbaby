@@ -2236,7 +2236,7 @@ export function siegeTone(name) {
 export const LADDER_NUM_CTLS = [
   ["fatk",   0, 1, 0,    "filter attack"],
   ["fdec",   0, 1, 0.45, "filter decay"],
-  ["fsus",   0, 1, 0.3,  "filter sustain"],
+  ["fsus",   0, 1, 0.6,  "filter sustain"],
   ["atk",    0, 1, 0.05, "attack"],
   ["sus",    0, 1, 0.75, "sustain"],
   ["mod",    0, 1, 0,    "mod wheel"],
@@ -2308,21 +2308,26 @@ export const LADDER_OSC_SEL_CTLS = [
 // Complete patches: the oscillator bank, the mixer, every panel control and
 // the four track sliders, so nothing of the last one survives a load. Each
 // is a front-plate setting in the spirit of the machine's own patch book.
+// The leads and the bass keep the contour's SWEEP (5 x amount x (1 - sustain)
+// octaves) near one octave and the emphasis at 0.4 or under: with two and a
+// half octaves falling through a resonant peak on every note, and a release
+// of most of a second, a sequenced line was a twang on the long notes and a
+// "pew" on each short one. Only "percussive" and "pedal bass" are plucks.
 const LADDER_TONES = {
   "model d bass": {
     d: "two saws at 16' a hair apart over a square an octave under, the filter half shut with a quick contour: the bass",
     osc: { osc1wave: "sawtooth", osc1range: -1, osc2wave: "sawtooth", osc2range: -1, osc2freq: 0.08, osc3wave: "square", osc3range: -2, osc3freq: 0,
            osc1: 0.7, osc2: 0.6, osc3: 0.45, noise: 0, noisetype: "white" },
-    cutoff: 0.42, emph: 0.35, amt: 0.55, decay: 0.5,
-    p: { fatk: 0, fdec: 0.4, fsus: 0.1, atk: 0.02, sus: 0.6, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+    cutoff: 0.44, emph: 0.22, amt: 0.38, decay: 0.42,
+    p: { fatk: 0.08, fdec: 0.45, fsus: 0.25, atk: 0.02, sus: 0.6, mod: 0, modmix: 0, drift: 0.3, tune: 0,
          kbd: "1/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "mono" },
   },
   "funk lead": {
     d: "three saws, the third an octave up, the emphasis up and the contour biting: the lead that talks",
     osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.12, osc3wave: "sawtooth", osc3range: 1, osc3freq: -0.1,
            osc1: 0.7, osc2: 0.6, osc3: 0.3, noise: 0, noisetype: "white" },
-    cutoff: 0.5, emph: 0.6, amt: 0.6, decay: 0.6,
-    p: { fatk: 0, fdec: 0.35, fsus: 0.2, atk: 0.02, sus: 0.8, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+    cutoff: 0.54, emph: 0.4, amt: 0.38, decay: 0.48,
+    p: { fatk: 0.1, fdec: 0.42, fsus: 0.45, atk: 0.02, sus: 0.8, mod: 0, modmix: 0, drift: 0.3, tune: 0,
          kbd: "2/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "mono" },
   },
   "brass": {
@@ -2356,8 +2361,8 @@ const LADDER_TONES = {
     d: "osc 3 taken out of the mix and dropped to LO, the wheel a touch up onto the oscillators: a gentle vibrato, the singing lead",
     osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.1, osc3wave: "triangle", osc3range: -7, osc3freq: 5,
            osc1: 0.7, osc2: 0.55, osc3: 0, noise: 0, noisetype: "white" },
-    cutoff: 0.55, emph: 0.5, amt: 0.5, decay: 0.65,
-    p: { fatk: 0, fdec: 0.6, fsus: 0.35, atk: 0.03, sus: 0.85, mod: 0.07, modmix: 0, drift: 0.3, tune: 0,
+    cutoff: 0.62, emph: 0.22, amt: 0.2, decay: 0.5,
+    p: { fatk: 0.2, fdec: 0.6, fsus: 0.65, atk: 0.06, sus: 0.85, mod: 0.07, modmix: 0, drift: 0.3, tune: 0,
          kbd: "2/3", osc3kbd: "off", oscmod: "on", filtmod: "off", decsw: "on", mode: "mono" },
   },
   "percussive": {
@@ -2848,7 +2853,7 @@ export const ENGINE_CHARACTER = {
   "dm:guitar": { kind: "modelled", sound: "an electric guitar rig: six strings, a pickup, an amp, a cab and feedback; chords strummed, hammer-ons, vibrato, sympathy", use: "rock, funk, surf, blues, indie, metal, psych, any electric guitar", human: "a tone preset, chords left to ring, gtvib for vibrato, gtsymp for sympathetic strings, gtfnoise for finger squeaks, dead notes for chk", cheap: "single equal notes on a grid with no amp drive" },
   "dm:halo": { kind: "drum", sound: "a cymbal synthesizer: hats, rides, crashes, chinas, a gong, a shaker", use: "every hat and cymbal in any electronic style", human: "hlovary for per-hit variation, hlochoke so one track is a played hat, ride bell accents", cheap: "equal-velocity sixteenths with hlovary at zero" },
   "dm:hexop": { kind: "digital", sound: "a six-operator fm synth: electric piano, bass, bells, brass, marimba, organ, pads", use: "80s keys and basses, bells, mallets, organ, brass stabs", human: "a preset, velocity driving brightness (it does, through the modulators), chorus and reverb", cheap: "the init patch, or fm brass as a melody played dry" },
-  "dm:ladder": { kind: "analog", sound: "a transistor-ladder monosynth after the minimoog: fat oscillators, the 24dB ladder, contours, drift", use: "fat basses, singing glide leads, g-funk whines, analog brass", human: "a preset first (model d bass, funk lead, vibrato lead), leads between C3 and C5, ldrmode mono with the track glide on tied notes, the filter half shut with the contour opening it, ldrmod no higher than about 0.1 for vibrato, delay and reverb on a bus", cheap: "a lead in octave 5 or above with the filter open, which beeps like a toy; the wheel deep onto the oscillators (ldrmod 0.3 and up swings notes by semitones, a siren); poly mode with no glide; a bare square" },
+  "dm:ladder": { kind: "analog", sound: "a transistor-ladder monosynth after the minimoog: fat oscillators, the 24dB ladder, contours, drift", use: "fat basses, singing glide leads, g-funk whines, analog brass", human: "a preset first (model d bass, funk lead, vibrato lead), leads between C3 and C5, ldrmode mono with the track glide on tied notes, the filter half shut with the contour opening it a little (morph 0.2..0.4, timb under 0.4, ldrfsus 0.5 or more), ldrmod no higher than about 0.1 for vibrato, delay and reverb on a bus", cheap: "a lead in octave 5 or above with the filter open, which beeps like a toy; the wheel deep onto the oscillators (ldrmod 0.3 and up swings notes by semitones, a siren); poly mode with no glide; a bare square; a deep contour onto a resonant filter (morph and timb both 0.5 or more with ldrfsus low), which twangs on every long note and goes pew on every short one; the track glide up on a line of untied notes, which slides into each of them" },
   "dm:lancet": { kind: "drum", sound: "a snare synthesizer with seven models, from analog to physical to a granular rattle", use: "the snare in any electronic kit, claps, rims", human: "lncdyn up so ghost notes are quieter and softer, lncrtimbre and lncrlevel around 0.2 so no two hits match", cheap: "one velocity and the randomizer off" },
   "dm:oracle": { kind: "analog", sound: "a poly analog after the prophet: two morphing VCOs with slop, a sub, drive and chorus", use: "warm pads, strings, brass, keys, chords in almost any genre", human: "orcslop up for analog drift, orcchorus for width, a preset, chords voiced between C3 and C5 with notes spread rather than stacked tight", cheap: "slop and chorus at zero; close triads up in octave 5, which sound like a toy organ" },
   "dm:siege": { kind: "drum", sound: "the bass drum synth: a sine with a pitch envelope and a drive after it", use: "techno, house, hard dance and trap kicks, rumbles", human: "tune it, sgefloor under 1 so velocity matters, a preset", cheap: "fine as it is" },
