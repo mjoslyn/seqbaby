@@ -68,6 +68,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
+│   ├── set/[id]/              the set player: a recorded live set replayed in the studio (SetPlayer.tsx, forkStore.ts)
 │   ├── GroovePicker.tsx + songs/genres.js (+ genrePlansMore.js, the second half of the plans)  the compose panel's `genre` tab: search 153 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
@@ -5918,7 +5919,7 @@ events are.
   `test/data.test.js`; routes `app/api/sets` (bodies are megabytes). The
   server's reading of the format is `lib/setRecording.js`, held to the
   engine's by `test/setFormat.test.js`, since public/js stays out of the Next
-  graph. Sets show on the owner's profile (private ones to the owner only).
+  graph. Sets show on the owner's profile (private ones to the owner only) and in settings (`app/settings/SetManager.tsx`: play, rename, publish, delete).
 - **The player** (`/set/<id>`) is the real studio in a visible same-origin
   frame on `/studio?embed`, with a shield over it while playing.
 - Known limits: computer-keyboard notes are not recorded; a step edit lands

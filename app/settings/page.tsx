@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/auth/session";
 import ProfileForm from "./ProfileForm";
 import AccountSettings from "./AccountSettings";
 import PatchManager from "./PatchManager";
+import SetManager from "./SetManager";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
@@ -26,11 +27,12 @@ export default async function SettingsPage() {
         </nav>
         <h1 className={styles.pageTitle}>profile settings</h1>
         <p className={styles.pageSub}>
-          Your profile showcases the songs and patches you publish.
+          Your profile showcases the songs, patches and sets you publish.
         </p>
         <ProfileForm profile={profile} />
         <AccountSettings email={user?.email ?? ""} />
         <PatchManager />
+        <SetManager />
       </div>
     </div>
   );
