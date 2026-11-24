@@ -429,7 +429,7 @@ env / fx / eq / comp / mod / automation per track.
 npm run db:migrate:local   # once (and after a schema change): D1 schema into wrangler's local DB
 npm run dev            # Next.js dev server on :3000, with local D1 / R2 (not jam or compose, see below)
 npm run preview        # the real Worker build (OpenNext) under wrangler dev on :8787
-npm run deploy         # build and deploy to Cloudflare
+npm run deploy         # build, apply new D1 migrations, deploy to Cloudflare
 npm run cf-typegen     # regenerate cloudflare-env.d.ts after changing wrangler.jsonc
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
@@ -6277,10 +6277,12 @@ https://github.com/mjoslyn/seqbaby.
 `npm run deploy` builds (`scripts/cf-build.mjs` sets the engine version from
 `WORKERS_CI_COMMIT_SHA` or the checkout's HEAD, then `opennextjs-cloudflare
 build`) and deploys. With Workers Builds connected to the repo, set the build
-command to `npm run cf:build` and the deploy command to `npx
-opennextjs-cloudflare deploy`; pushes to `main` deploy and other branches get
-preview URLs. A schema change is `npm run db:migrate` (remote) before the
-deploy that needs it.
+command to `npm run cf:build` and the deploy command to `npm run cf:deploy`;
+pushes to `main` deploy and other branches get preview URLs. `cf:deploy`
+applies the D1 migrations (`wrangler d1 migrations apply --remote`, only the
+new ones) before it deploys, after the build has succeeded, so a schema change
+lands with the code that needs it and a failed migration stops the deploy.
+`npm run db:migrate` still runs them on their own.
 
 First deploy, once:
 
