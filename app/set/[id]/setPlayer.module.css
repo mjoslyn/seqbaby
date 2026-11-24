@@ -1,0 +1,32 @@
+.player { display: flex; flex-direction: column; gap: 8px; }
+.bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 2;
+  padding: 8px 0; background: #0e0f12;
+}
+.play, .btn {
+  font: inherit; font-size: 12px; color: #e8e8ea;
+  background: #17191e; border: 1px solid #2a2d35; border-radius: 6px;
+  padding: 8px 12px; min-height: 36px; cursor: pointer;
+}
+.play { background: #e5484d; border-color: #e5484d; color: #fff; font-weight: 700; min-width: 104px; }
+.play:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:hover:not(:disabled) { border-color: #3a3d45; }
+.time { font-size: 12px; color: #9aa0aa; font-variant-numeric: tabular-nums; min-width: 96px; }
+.scrub { flex: 1 1 200px; accent-color: #e5484d; min-width: 120px; }
+.msg { font-size: 12px; color: #9aa0aa; }
+.error { font-size: 12px; color: #e5484d; }
+.stage { position: relative; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden; }
+.frame { display: block; width: 100%; height: min(78vh, 900px); border: 0; background: #0e0f12; }
+.shield {
+  position: absolute; inset: 0; cursor: not-allowed;
+  display: flex; align-items: flex-end; justify-content: center; padding: 10px;
+}
+.shield span {
+  font-size: 11px; color: #9aa0aa; background: rgba(14, 15, 18, 0.85);
+  border: 1px solid #2a2d35; border-radius: 4px; padding: 4px 8px;
+}
+@media (max-width: 768px) {
+  .frame { height: 70vh; }
+  .time { min-width: 0; }
+}

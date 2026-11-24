@@ -11,9 +11,31 @@ declare global {
     remove: (name: string) => Promise<void>;
   };
 
+  /** Where a set's replay is (public/js/setRecorder.js). */
+  type SetReplayState = { playing: boolean; step: number; steps: number; seconds: number; total: number; ended: boolean };
+
   interface Window {
     seqbaby?: {
       version: number;
+      /** Recorded live sets (public/js/setRecorder.js). */
+      sets?: {
+        /** Arm the recorder (it starts with play, or now while playing), or stop it. */
+        toggle: (opts?: { forkedFrom?: string | null; forkStep?: number | null }) => void;
+        state: () => { phase: "off" | "armed" | "recording"; steps?: number; seconds?: number; events?: number; forkedFrom?: string | null };
+        capture: () => unknown;
+        /** Put the studio at a recording's start, transport stopped. */
+        load: (rec: unknown, opts?: { onProgress?: (msg: string) => void; onStep?: (step: number) => void; onEnd?: () => void; followView?: boolean }) => Promise<SetReplayState | null>;
+        play: () => Promise<SetReplayState | null>;
+        /** Stop the transport and keep the place: play goes on from it. */
+        pause: () => Promise<SetReplayState | null>;
+        seek: (step: number) => Promise<SetReplayState | null>;
+        close: () => Promise<void>;
+        replay: () => SetReplayState | null;
+        /** Where a paused replay is, as a starting point to record a new set from. */
+        forkPoint: () => { start: unknown; step: number };
+        /** Open the studio on a fork point, armed to record. */
+        openFork: (point: { start: unknown; step: number }, opts?: { setId?: string | null }) => Promise<void>;
+      };
       serializeSet: () => unknown;
       /** Start / stop the transport (idempotent, unlike the play button). */
       play: () => Promise<void>;

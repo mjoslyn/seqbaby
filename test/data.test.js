@@ -12,6 +12,7 @@ import * as patches from "../lib/data/patches.js";
 import * as profiles from "../lib/data/profiles.js";
 import { INLINE_MAX } from "../lib/data/blob.js";
 import * as turns from "../lib/data/composeTurns.js";
+import * as sets from "../lib/data/sets.js";
 
 async function user(env, id, email) {
   env.DB.sqlite
@@ -318,4 +319,71 @@ test("a compose turn's outcome is set by its starter only, and holds no words", 
   // deleting the account keeps the numbers and lets go of whose they were
   env.DB.sqlite.prepare(`delete from "user" where id = ?`).run(alice);
   assert.equal(row("job-alice-0001").user_id, null);
+});
+
+const recording = (n = 1) => ({
+  _set: 1,
+  bpm: 120,
+  steps: 64 * n,
+  seconds: 8 * n,
+  marks: [[0, 0], [64 * n, 8 * n]],
+  start: { session: session(n), decks: [], mix: null, perf: { tick: 0 }, view: "groove" },
+  events: [[0, 0, "perf", { scene: 0 }], [4, 0.5, "ctl", { t: "a:0", s: ".p-cutoff", i: 0, v: "0.4", e: "input" }]],
+});
+
+test("a set is its owner's until it is public, and only its owner writes it", async () => {
+  const { env, alice, bob } = await world();
+  const song = await songs.saveSong(env, alice, { title: "s", data: session() });
+  const theirs = await songs.saveSong(env, bob, { title: "b", data: session() });
+  const saved = await sets.saveSet(env, alice, { title: "  live at home ", recording: recording(), songId: song.id });
+  assert.ok(saved.id, JSON.stringify(saved));
+  assert.equal(saved.title, "live at home");
+  // a song id that is not the caller's is dropped
+  const other = await sets.saveSet(env, alice, { title: "x", recording: recording(), songId: theirs.id });
+  assert.equal((await sets.setMeta(env, alice, other.id)).songId, null);
+  assert.equal((await sets.setMeta(env, alice, saved.id)).songId, song.id);
+
+  assert.equal(await sets.setMeta(env, bob, saved.id), null);
+  assert.equal((await sets.loadSet(env, null, saved.id)).error, "set not found");
+  const mine = await sets.loadSet(env, alice, saved.id);
+  assert.equal(mine.recording.events.length, 2);
+  assert.equal(mine.set.steps, 64);
+  assert.equal(mine.set.owned, true);
+
+  assert.equal((await sets.setSetPublic(env, bob, saved.id, true)).error, "set not found");
+  assert.equal((await sets.renameSet(env, bob, saved.id, "mine now")).error, "set not found");
+  assert.equal((await sets.deleteSet(env, bob, saved.id)).error, "set not found");
+  assert.deepEqual(await sets.listPublicSets(env, alice), []);
+
+  assert.ok((await sets.setSetPublic(env, alice, saved.id, true)).ok);
+  const seen = await sets.loadSet(env, bob, saved.id);
+  assert.equal(seen.set.owned, false);
+  assert.equal(seen.recording.steps, 64);
+  assert.equal((await sets.listPublicSets(env, alice)).length, 1);
+  assert.equal((await sets.listMySets(env, bob)).sets.length, 0);
+  assert.equal((await sets.listMySets(env, alice)).sets.length, 2);
+
+  assert.ok((await sets.deleteSet(env, alice, saved.id)).ok);
+  assert.equal((await sets.loadSet(env, alice, saved.id)).error, "set not found");
+  assert.equal(await env.BLOBS.get(`sets/${saved.id}/set.json`), null);
+});
+
+test("a fork names a set the caller could read, and a bad recording is refused", async () => {
+  const { env, alice, bob } = await world();
+  const a = await sets.saveSet(env, alice, { title: "private", recording: recording() });
+  const forkPrivate = await sets.saveSet(env, bob, { title: "f", recording: recording(), forkedFrom: a.id, forkStep: 16 });
+  assert.equal((await sets.setMeta(env, bob, forkPrivate.id)).forkedFrom, null);
+  await sets.setSetPublic(env, alice, a.id, true);
+  const fork = await sets.saveSet(env, bob, { title: "f", recording: recording(), forkedFrom: a.id, forkStep: 16 });
+  const m = await sets.setMeta(env, bob, fork.id);
+  assert.equal(m.forkedFrom, a.id);
+  assert.equal(m.forkStep, 16);
+
+  assert.match((await sets.saveSet(env, alice, { recording: { _set: 1 } })).error, /not a readable set/);
+  assert.match((await sets.saveSet(env, alice, { recording: { ...recording(), events: [[5, 0, "perf", {}], [2, 0, "perf", {}]] } })).error, /out of order/);
+  assert.equal((await sets.saveSet(env, null, { recording: recording() })).error, "sign in to save a set");
+  // deleting the account takes its sets
+  env.DB.sqlite.prepare('delete from "user" where id = ?').run(alice);
+  assert.equal(env.DB.sqlite.prepare("select count(*) as n from sets where owner_id = ?").get(alice).n, 0);
+  assert.equal((await sets.setMeta(env, bob, fork.id)).forkedFrom, null);
 });

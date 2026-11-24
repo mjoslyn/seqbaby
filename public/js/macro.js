@@ -282,6 +282,30 @@ function releasePad(pad) {
   }
 }
 
+// ---- a gesture, from outside ------------------------------------------------
+// A recorded set (setRecorder.js) hears each gesture on a pad and plays it
+// back through the same three steps a finger takes.
+
+let gestureListener = null;
+/** @param {((pad: number, phase: "down"|"move"|"up", x: number, y: number) => void)|null} fn */
+export function onMacroGesture(fn) { gestureListener = fn; }
+function emitGesture(pad, phase) {
+  if (!gestureListener) return;
+  const i = (state.macroPads || []).indexOf(pad);
+  if (i >= 0) try { gestureListener(i, phase, pad.pos.x, pad.pos.y); } catch (e) { console.warn(e); }
+}
+
+/** Play a pad as a finger would: `down` takes the base, `move` sweeps, `up` lets go. */
+export function playMacroGesture(index, phase, x, y) {
+  const pad = (state.macroPads || [])[index];
+  if (!pad) return;
+  if (phase === "down") snapshot(pad);
+  pad.pos.x = Math.max(0, Math.min(1, Number(x) || 0));
+  pad.pos.y = Math.max(0, Math.min(1, Number(y) || 0));
+  if (phase === "up") releasePad(pad);
+  else applyPad(pad, false);
+}
+
 /** Wire an element as pad `pad`'s playing surface. Same idiom as the wavetable
  *  canvas: rect + clamp + pointer capture, and `pointercancel` handled. */
 function attachPadSurface(pad, el, cursor, onMove) {
@@ -314,6 +338,7 @@ function attachPadSurface(pad, el, cursor, onMove) {
     setFrom(e.clientX, e.clientY);
     paint();
     applyPad(pad, false);
+    emitGesture(pad, "down");
   });
   el.addEventListener("pointermove", (e) => {
     if (drag !== e.pointerId) return;
@@ -325,6 +350,7 @@ function attachPadSurface(pad, el, cursor, onMove) {
     for (const p of (e.getCoalescedEvents?.() || [e])) setFrom(p.clientX, p.clientY);
     paint();
     applyPad(pad, false);
+    emitGesture(pad, "move");
     e.preventDefault();
   });
   const end = (e) => {
@@ -332,6 +358,7 @@ function attachPadSurface(pad, el, cursor, onMove) {
     drag = null;
     try { el.releasePointerCapture(e.pointerId); } catch {}
     el.classList.remove("is-held");
+    emitGesture(pad, "up");
     releasePad(pad);
     paint();
   };

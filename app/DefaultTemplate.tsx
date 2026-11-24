@@ -73,7 +73,7 @@ export default function DefaultTemplate() {
     window.addEventListener("seqbaby:newset", onNew);
 
     const qs = new URLSearchParams(location.search);
-    const carriesSession = qs.has("s") || qs.has("open") || qs.has("jam");
+    const carriesSession = qs.has("s") || qs.has("open") || qs.has("jam") || qs.has("fork");
     let cancelled = false;
     const onReady = () => {
       if (!cancelled) void apply();

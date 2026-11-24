@@ -22,6 +22,7 @@ import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from 
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
 import { installKnobRecord } from "./knobRecord.js";
+import { installSetRecorder } from "./setRecorder.js";
 import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -742,6 +743,7 @@ export function init() {
   installPianoView();
   installMixView();
   installMix();
+  installSetRecorder();
   installViews();
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to

@@ -127,6 +127,8 @@ export const ENGINE_MODULES = [
   "scaleUI.js",
   "session.js",
   "sessionFormat.js",
+  "setFormat.js",
+  "setRecorder.js",
   "signal.js",
   "silverbox.js",
   "soundDefaults.js",

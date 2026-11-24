@@ -5273,3 +5273,8 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
    kept while hidden so the pattern bar never jumps when play starts. */
 .sq-pattern__prog { align-self: center; margin: 0; min-width: 48px; height: 14px; padding: 0 4px; font-size: 9px; }
 .sq-pattern__prog[hidden] { display: inline-grid; visibility: hidden; }
+
+/* The set recorder (setRecorder.js): armed blinks, recording is red. */
+#set-record.is-armed { border-color: #e5484d; color: #e5484d; animation: sq-set-armed 1s steps(2, start) infinite; }
+#set-record.is-recording { background: #e5484d; border-color: #e5484d; color: #fff; }
+@keyframes sq-set-armed { to { opacity: 0.45; } }

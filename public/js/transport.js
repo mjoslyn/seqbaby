@@ -353,6 +353,11 @@ export async function ensureMidi() {
   return state.midi;
 }
 
+/** @type {((time: number, stepDur: number) => void)|null} */
+let stepHook = null;
+/** One function the transport calls at the top of every step (setRecorder.js). */
+export function setStepHook(fn) { stepHook = fn; }
+
 export function silenceAllVoices() {
   const now = state.audioCtx?.currentTime ?? 0;
   for (const t of state.tracks) {
@@ -534,6 +539,10 @@ export async function startPlayback(opts = {}) {
     // notes came out half the length of their step; at 180 they overlapped the
     // next one.
     const baseStepDur = 60 / (Tone.getTransport().bpm.value || currentBpm()) / 4;
+    // A recorded set (setRecorder.js): what was done before this step, sampled
+    // while recording, written back while replaying. First, so a clip launched
+    // or a track muted then is what this step plays.
+    if (stepHook) { try { stepHook(time, baseStepDur); } catch (e) { console.warn(e); } }
     // null when nothing is soloed; otherwise the set that stays audible, which
     // includes whatever feeds a soloed bus (see soloAudibleTracks).
     const soloAudible = soloAudibleTracks();

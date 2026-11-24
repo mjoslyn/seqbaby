@@ -13,6 +13,7 @@ import PatchRoll from "@/app/home/PatchRoll";
 import { canPreview, engineLabel, patchEngineKey, patchKey } from "@/app/home/patchPreview";
 import { named } from "@/app/home/feed";
 import styles from "@/app/ui.module.css";
+import { clockLabel } from "@/lib/setRecording.js";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ export default async function ProfilePage({
     );
   }
 
-  const { profile, isOwner, songs, patches } = res;
+  const { profile, isOwner, songs, patches, sets = [] } = res;
   const name = profile.username || profile.display_name || "anon";
 
   return (
@@ -137,6 +138,33 @@ export default async function ProfilePage({
               )}
             </div>
           ))
+        )}
+
+        {sets.length > 0 && (
+          <>
+            <div className={styles.sectionHead}>
+              <h3>sets</h3>
+              <span className={styles.sectionCount}>{sets.length}</span>
+            </div>
+            {sets.map((x) => (
+              <div className={styles.repoRow} key={x.id}>
+                <div className={styles.repoMain}>
+                  <Link className={styles.repoName} href={`/set/${x.id}`}>
+                    {x.title}
+                  </Link>
+                  <div className={styles.repoMeta}>
+                    {clockLabel(x.seconds)}
+                    {x.decks ? ` · ${x.decks + 1} decks` : ""}
+                    {x.forked ? " · fork" : ""}
+                    {isOwner && !x.is_public ? " · private" : ""}
+                  </div>
+                </div>
+                <Link className={styles.repoAction} href={`/set/${x.id}`}>
+                  play
+                </Link>
+              </div>
+            ))}
+          </>
         )}
 
         <div className={styles.sectionHead}>

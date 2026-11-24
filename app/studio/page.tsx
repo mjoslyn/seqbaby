@@ -9,6 +9,7 @@ import EnginePreload from "@/app/EnginePreload";
 import EngineScripts from "@/app/EngineScripts";
 import OpenSongOnLoad from "@/app/OpenSongOnLoad";
 import DefaultTemplate from "@/app/DefaultTemplate";
+import SetRecordPanel from "@/app/SetRecordPanel";
 import StudioBreadcrumb from "@/app/StudioBreadcrumb";
 import { AccountBar } from "@/app/AccountBar";
 import { siteOutOfBudget } from "@/lib/composeJobs.js";
@@ -223,6 +224,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Searc
       {!embed && <OpenSongOnLoad />}
       {!embed && <DefaultTemplate />}
       {!embed && <StudioBreadcrumb />}
+      {!embed && <SetRecordPanel />}
     </>
   );
 }

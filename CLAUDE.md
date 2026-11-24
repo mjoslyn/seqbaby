@@ -104,7 +104,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 share put/get for the legacy static server (in memory)
 ├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares;
-│                              0002_compose_turns.sql: how compose turns went)
+│                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -340,6 +340,10 @@ env / fx / eq / comp / mod / automation per track.
   (`clonePattern`), pasted over the pattern another track is on. Notes and
   lanes travel; the sound (p-lock) stays the target's, and lanes its engine
   cannot play are dropped.
+- `setRecorder.js` / `setFormat.js` — recorded live sets: the recorder
+  (the transport's `set` button) and the replay the set player drives.
+  `setFormat.js` is the format and its arithmetic, **no imports** but
+  sessionFormat.js. See the live sets section.
 - `bounce.js` — WAV render via MediaRecorder.
 - `measure.js` — `measureSet(session)`: a session played with the master
   disconnected from the output, each section on its own, every track's meter
@@ -5876,6 +5880,51 @@ derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
   and never returns empty -- it is on the save path, and losing work to a name
   generator choking on a hand-edited blob would be absurd.
 
+## Live sets (`setRecorder.js` + `setFormat.js` + `app/set/[id]`)
+
+The transport's `set` button records a performance: from play (or now, if
+armed while playing) to stop. A set is a starting picture of the studio (the
+song, every mix deck's song, the mix runtime, which clip each track is on,
+every transport counter) plus a timeline of events stamped with the STEP they
+were in place for and a `frac` of the step before. `setFormat.js` says what the
+events are.
+
+- **The clock is the step.** The transport calls one hook at the top of every
+  step (`setStepHook`, transport.js). Recording samples the performance state
+  there and diffs it (`perf`: clip slots, stopped / frozen / queued, mute,
+  solo, scene, queue, mode, view, the mix runtime and every deck,
+  `captureMixRuntime`); replaying writes those diffs back at the same step.
+  Sampling instead of logging means every way of launching a clip or moving
+  the crossfader is caught without instrumenting it.
+- **Logged**: `ctl` (a control's own input / change event, located by track
+  ref `deck:n` plus its most specific class, replayed through the same event),
+  `patch` (the song or a deck's song as jamSync's diff, on the interactions an
+  edit ends in, written with `mergeSet` / `mergeDeckB`), `macro` (a havoc pad
+  gesture, `onMacroGesture` / `playMacroGesture` in macro.js), `deck` /
+  `eject` / `mix` (from `onMixEvent` in mix.js, emitted from the outermost
+  call only). A replayed deck asks for the id it had (`loadDeckB`'s
+  `info.id`), so refs and ids line up without a map.
+- **Replay** (`window.seqbaby.sets`): `load` restores the start
+  (`restoreStart`, transport stopped), `play`, `pause` (stops the transport,
+  keeps the counters for the next play: `pendingCounters`), `seek` (restore,
+  then the events up to a step with only each control's last value),
+  `forkPoint` (the studio as it stands, as a new start).
+- **Fork**: the player puts the fork point in IndexedDB (`app/set/forkStore.ts`,
+  it is megabytes with samples) and opens `/studio?fork=1`;
+  `app/SetRecordPanel.tsx` takes it, calls `openFork` (restore and arm), and
+  the saved set carries `forked_from` / `fork_step`.
+- **Storage**: a `sets` row (0003_sets.sql) for the lists, the recording in R2
+  at `sets/<id>/set.json`. `lib/data/sets.js`, its rules in
+  `test/data.test.js`; routes `app/api/sets` (bodies are megabytes). The
+  server's reading of the format is `lib/setRecording.js`, held to the
+  engine's by `test/setFormat.test.js`, since public/js stays out of the Next
+  graph. Sets show on the owner's profile (private ones to the owner only).
+- **The player** (`/set/<id>`) is the real studio in a visible same-origin
+  frame on `/studio?embed`, with a shield over it while playing.
+- Known limits: computer-keyboard notes are not recorded; a step edit lands
+  on the interaction that ends it (a long paint arrives at pointerup); the
+  crossfader by hand is sampled per step.
+
 ## Bounce (`bounce.js`)
 
 Pattern or whole-session render: taps the post-limiter master into a
@@ -6255,7 +6304,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 96 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 98 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

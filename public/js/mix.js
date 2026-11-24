@@ -129,6 +129,25 @@ export function deckATracks() {
   return state.tracks.filter(inSong);
 }
 
+// ---- a recorded set listens (setRecorder.js) ---------------------------------
+// The things done to the mix that are not a state a step can sample: a song
+// loaded onto a deck, a deck taken off, one landed or promoted, both kept.
+// Emitted only from the outermost call (`mixOps`): a landing ejects decks on
+// its way, and a replay that re-ejected them would eject decks loaded since.
+
+let mixListener = null;
+let mixOps = 0;
+/** @param {((kind: string, data: any) => void)|null} fn */
+export function onMixEvent(fn) { mixListener = fn; }
+function emitMix(kind, data) {
+  if (!mixListener || mixOps > 0) return;
+  try { mixListener(kind, data); } catch (e) { console.warn(e); }
+}
+function guarded(fn) {
+  mixOps++;
+  try { return fn(); } finally { mixOps--; }
+}
+
 /** Something about the mix changed: the view repaints (never from inside the scheduler). */
 function announce() {
   setTimeout(() => { try { window.dispatchEvent(new CustomEvent("seqbaby:mix")); } catch {} }, 0);
@@ -170,6 +189,17 @@ function makeDeckBus(deck) {
  * @returns {Promise<boolean>} whether it loaded (false: ejected meanwhile)
  */
 export function loadDeckB(blob, info = {}) {
+  const top = mixOps === 0;
+  const p = guarded(() => loadDeckBInner(blob, info));
+  const made = state.mix?.decks?.find(x => x._recBlob === blob);
+  if (made) {
+    delete made._recBlob;
+    if (top && mixListener) emitMix("deck", { id: made.id, title: made.title, clips: !!made.forClips, xf: made.xf ?? null, replace: info.replace ?? null, session: deepCopy(blob) });
+  }
+  return p;
+}
+
+function loadDeckBInner(blob, info = {}) {
   const check = validateSet(blob);
   if (!check.ok) throw new Error(`Not a readable seqbaby session: ${check.errors.join("; ")}`);
   const s = deepCopy(blob);
@@ -206,7 +236,8 @@ export function loadDeckB(blob, info = {}) {
   const sum = deckSummary(s);
   const repeats = Array.from({ length: PATTERN_COUNT }, (_, i) => Math.max(1, Number(s.patternRepeats?.[i]) || 1));
   const d = {
-    id: nextDeckId(m, !!info.clips),
+    // a recorded set's replay asks for the id the deck had (setRecorder.js)
+    id: typeof info.id === "string" && info.id && !m.decks.some(x => x.id === info.id) ? info.id : nextDeckId(m, !!info.clips),
     title: String(info.title || "").trim() || "untitled",
     source: info.source || null,
     // the loaded song's globals: what landing writes, and what the header reads
@@ -229,7 +260,7 @@ export function loadDeckB(blob, info = {}) {
     forClips: !!info.clips,
     bus: null,
     loading: true,
-    pending: tds.slice(), made: [],
+    pending: tds.slice(), made: [], _recBlob: blob,
     refs: tds.map(td => ({ out: td.outIndex, comp: td.compSourceIndex })),
   };
   // read by the transport for every note this deck plays (noteForStep)
@@ -1284,7 +1315,13 @@ function sendOff(tracks, afterMs = 70, done = null) {
  * The last one out takes deck A's bus with it, and the song is routed back
  * to the master, at its own tempo, exactly as it was.
  */
-export function ejectDeckB({ quiet = false, id } = {}) {
+export function ejectDeckB(opts = {}) {
+  const d = getDeck(opts.id);
+  if (d) emitMix("eject", { id: d.id });
+  return guarded(() => ejectDeckBInner(opts));
+}
+
+function ejectDeckBInner({ quiet = false, id } = {}) {
   const m = state.mix;
   const d = getDeck(id);
   if (!m || !d) return false;
@@ -1422,6 +1459,11 @@ function bakeScale(t, scale) {
  * own scale) and the session's scale is switched off, so nothing changes pitch.
  */
 export function keepBothDecks() {
+  if (state.mix && !state.mix.landing && deskDecks().length && !state.mix.decks.some(d => d.loading)) emitMix("mix", { op: "keep" });
+  return guarded(() => keepBothDecksInner());
+}
+
+function keepBothDecksInner() {
   const m = state.mix;
   if (!m || m.landing || !deskDecks().length || m.decks.some(d => d.loading)) return false;
   // The desk's decks are what is kept. The songs loaded in the clip view are
@@ -1552,6 +1594,12 @@ function settle() {
  * @returns {Promise<boolean>}
  */
 export function landDeckB(id) {
+  const d0 = getDeck(id);
+  if (d0 && !d0.loading && !state.mix?.landing) emitMix("mix", { op: "land", id: d0.id });
+  return guarded(() => landDeckBInner(id));
+}
+
+function landDeckBInner(id) {
   const m = state.mix;
   const d = getDeck(id);
   if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
@@ -1690,7 +1738,15 @@ export function ejectDeckA() { return promoteDeck(deskDecks()[0]); }
  */
 export function ejectClipSong() { return promoteDeck(clipDecks()[0]); }
 
+/** A deck by id to deck A's place (a recorded set's replay of an eject of deck A). */
+export function promoteDeckById(id) { return promoteDeck(getDeck(id)); }
+
 function promoteDeck(d) {
+  if (d && !d.loading && !state.mix?.landing) emitMix("mix", { op: "promote", id: d.id });
+  return guarded(() => promoteDeckInner(d));
+}
+
+function promoteDeckInner(d) {
   const m = state.mix;
   if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
   const clips = !!d.forClips;
@@ -1807,6 +1863,77 @@ function promoteDeck(d) {
 }
 
 // ---- keeping it honest ------------------------------------------------------------
+
+// ---- the mix's runtime, read whole and written back (setRecorder.js) ---------
+//
+// Everything about a mix a recorded set samples every step: what a step can
+// change without a song changing. Deck ids go through `ids` (recorded -> live)
+// on the way back, since a replay's decks are loaded afresh.
+
+const MIX_FIELDS = ["x", "curve", "bands", "xfOff", "sideA", "tempoX", "tempoLink", "focus", "aOff", "aArm", "aArmOn", "aArmFade"];
+const DECK_FIELDS = ["on", "arm", "armOn", "armFade", "scene", "queued", "queuePhrase", "xf", "chain", "barCount", "countOrigin", "bpm"];
+
+/** The mix's runtime as plain data, or null with no mix. */
+export function captureMixRuntime() {
+  const m = state.mix;
+  if (!m) return null;
+  const out = {};
+  for (const k of MIX_FIELDS) out[k] = m[k] ?? null;
+  out.fade = m.fade ? deepCopy(m.fade) : null;
+  out.decks = {};
+  for (const d of m.decks) {
+    if (d.loading) continue;
+    const r = {};
+    for (const k of DECK_FIELDS) r[k] = d[k] ?? null;
+    r.repeats = d.repeats.slice();
+    out.decks[d.id] = r;
+  }
+  return out;
+}
+
+/**
+ * Write a captured runtime (or the part of one that moved) onto the live mix.
+ * @param {any} snap from captureMixRuntime, whole or a diff of it
+ * @param {(id: string) => string} [ids] recorded deck id -> live deck id
+ * @param {number} [at] the audio time it takes effect at
+ */
+export function restoreMixRuntime(snap, ids = (id) => id, at) {
+  const m = state.mix;
+  if (!m || !snap) return;
+  const live = (id) => (id == null ? id : ids(id));
+  for (const k of MIX_FIELDS) {
+    if (!(k in snap)) continue;
+    m[k] = k === "focus" ? live(snap[k]) : snap[k];
+  }
+  if ("fade" in snap) m.fade = snap.fade ? { ...deepCopy(snap.fade), ref: snap.fade.ref != null && snap.fade.ref !== "a" ? live(snap.fade.ref) : snap.fade.ref } : null;
+  let silenced = false;
+  for (const [rid, r] of Object.entries(snap.decks || {})) {
+    if (!r) continue;
+    const d = getDeck(live(rid));
+    if (!d || d.loading) continue;
+    if ("scene" in r && r.scene != null && r.scene !== d.scene) putDeckOn(d, r.scene);
+    for (const k of DECK_FIELDS) if (k in r && k !== "scene") d[k] = r[k];
+    if (Array.isArray(r.repeats)) d.repeats = r.repeats.slice();
+    if ("on" in r && !r.on) silenced = true;
+  }
+  if ("aOff" in snap && snap.aOff) silenced = true;
+  if (silenced) releaseSilencedTracks();
+  refreshNoiseBeds();
+  applyXfade(at);
+  applyTempo();
+  announce();
+}
+
+/** A deck's load, as a promise (resolved true once built), for a replay waiting on one. */
+export function deckReady(id) {
+  const d = getDeck(id);
+  if (!d) return Promise.resolve(false);
+  if (!d.loading) return Promise.resolve(true);
+  return new Promise((res) => {
+    const prev = d.resolve;
+    d.resolve = (ok) => { try { prev?.(ok); } finally { res(ok); } };
+  });
+}
 
 export function installMix() {
   // A whole session arriving tears every track down, the decks' with them.

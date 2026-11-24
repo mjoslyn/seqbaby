@@ -31,12 +31,30 @@ import { SET_VERSION, validateSet } from "./sessionFormat.js";
 import { loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
 import { measureSet } from "./measure.js";
+import { captureStart, closeReplay, forkPoint, loadReplay, openFork, pauseReplay, playReplay, replayState, seekReplay, setRecordState, toggleSetRecord } from "./setRecorder.js";
 import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 
 export function installAppApi() {
   if (typeof window === "undefined") return;
   const api = {
     version: 1,
+    // Recorded live sets (setRecorder.js): the studio's recorder, and the
+    // replay the set player (app/set/[id]) drives. `forkPoint` is where a
+    // paused replay is, as a starting point; `openFork` opens the studio on
+    // one, armed to record a new set from it.
+    sets: {
+      toggle: toggleSetRecord,
+      state: setRecordState,
+      capture: captureStart,
+      load: loadReplay,
+      play: playReplay,
+      pause: pauseReplay,
+      seek: seekReplay,
+      close: closeReplay,
+      replay: replayState,
+      forkPoint,
+      openFork,
+    },
     // session (song) snapshot <-> live engine
     serializeSet,
     applySet,

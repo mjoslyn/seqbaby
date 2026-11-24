@@ -55,7 +55,10 @@ export type PublicProfile =
       isOwner: boolean;
       songs: ProfileSong[];
       patches: ProfilePatch[];
+      sets: ProfileSet[];
     };
+
+export type ProfileSet = { id: string; title: string; seconds: number; decks: number; is_public: boolean; created_at: string; forked: boolean };
 
 async function who() {
   const [env, userId] = await Promise.all([cfEnv(), currentUserId()]);

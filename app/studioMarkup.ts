@@ -624,6 +624,7 @@ export const STUDIO_BODY = String.raw`
     </a>
     <button id="play" class="sq-play">play</button>
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record notes and knob moves" title="record computer-keyboard notes into the active track, and knob moves into their automation lanes, while the transport plays"></button>
+    <button id="set-record" class="sq-btn--ghost sq-set-rec" type="button" aria-pressed="false" title="record a live set: from play to stop, every clip launched, pattern switched, deck mixed, knob turned and edit made, to play back in the set player"><span class="sq-btn__label">set</span></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="write the notes you just played into the active track, after the fact"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <!-- Phone only: the tempo as a dial, mirroring #bpm both ways (main.js). -->
