@@ -71,5 +71,9 @@
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "seqbaby" }],
   // The compose guide is imported as text into the Worker (workers/composeJob.ts).
   "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Workers Builds deploys a branch other than main as a Preview
+  // (`npx wrangler preview`), which refuses to run without this block. Empty:
+  // a preview takes every binding above as it is.
+  "previews": {}
 }
