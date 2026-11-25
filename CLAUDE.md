@@ -3995,8 +3995,13 @@ first     only the first pass                       !first  every pass but it
 
 ## Fill and mute scenes (`perform.js`)
 
-The transport's performance cluster (`#perf`: fill, `mutes 1 2 3 4`, master),
-on every device; on a phone it is a line of its own under the icon row.
+The performance cluster (`#perf`: fill and `mutes 1 2 3 4`), on every device.
+On desktop it sits on the note row (`.sq-transport__kbd-row`, the scale bar)
+between havoc and code / vim, which moved there with it: the transport's
+first line is play, record, tempo, `master` and the view switch. On a phone
+the rows dissolve (`display: contents`), so havoc keeps its place in the icon
+row by `order`, and `master`, fill and the mutes make a line of their own
+under it (all three `order: 4`); code and vim are hidden there as before.
 
 - **Fill is `state.fill`**, which only trig conditions read. Hold the button
   for as long as the fill lasts; a press shorter than 260ms latches it until
@@ -4309,7 +4314,8 @@ different transport clusters on desktop, so rather than a wrapper that would
 drag the metronome along, `.sq-transport::before` is a line break ordered in
 front of them, the `.sq-track__head::before` trick. The session button lives in
 the transport's right cluster for that reason (`sq-mobile-only`, invisible on
-desktop); macro stays in the main cluster, text on desktop and icon over its
+desktop); macro (havoc) is on the note row with fill, the mutes, code and
+vim, text on desktop and icon over its
 `.sq-btn__label` caption on a phone, as clear and roll are, and the pattern bar it opens as a modal is hidden outright below
 768px, since everything in it was already only reachable through that modal.
 

@@ -3446,8 +3446,9 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      is ordered after them explicitly: last in the group, after session. */
   .sq-transport #macro-pads { order: 3; }
   /* fill, the mute scenes and master: a line of their own under the icons */
-  .sq-transport .sq-perf { order: 4; flex: 1 1 100%; justify-content: space-between; }
-  .sq-transport .sq-perf #fill-btn, .sq-transport .sq-perf #master-btn { min-height: 40px; padding: 0 14px; }
+  .sq-transport .sq-perf { order: 4; flex: 1 1 auto; justify-content: space-between; }
+  .sq-transport #master-btn { order: 4; flex: 0 0 auto; }
+  .sq-transport .sq-perf #fill-btn, .sq-transport #master-btn { min-height: 40px; padding: 0 14px; }
   .sq-transport .sq-mute-scenes button { min-height: 40px; min-width: 40px; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
@@ -4900,7 +4901,7 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-view-switch button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; }
 .sq-view-switch button + button { border-left: 1px solid var(--border); }
 .sq-view-switch button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
-/* The performance cluster (perform.js, master.js): fill, mute scenes, master. */
+/* The performance cluster (perform.js): fill and the mute scenes, on the note row. */
 .sq-perf { display: inline-flex; gap: 6px; align-items: center; }
 #fill-btn { touch-action: none; user-select: none; -webkit-user-select: none; }
 #fill-btn.is-on { background: var(--accent); border-color: var(--accent); color: #0b0d10; }

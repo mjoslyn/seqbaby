@@ -630,20 +630,8 @@ export const STUDIO_BODY = String.raw`
     <!-- Phone only: the tempo as a dial, mirroring #bpm both ways (main.js). -->
     <div class="sq-field sq-mobile-only sq-bpm-dial"><label for="bpm-dial">110 bpm</label><input id="bpm-dial" type="range" min="40" max="240" step="1" value="110" aria-label="bpm" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
-    <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
-    <!-- The performance cluster (perform.js, master.js): the fill button the
-         steps' trig conditions read, four mute scenes, and the master chain. -->
-    <div id="perf" class="sq-perf" role="group" aria-label="performance">
-      <button id="fill-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="fill: hold to play the steps set to 'fill only' and rest the ones set to 'not in a fill' (a step's condition is in its editor: right-click or long-press a note). A quick tap latches it">fill</button>
-      <div id="mute-scenes" class="sq-mute-scenes" role="group" aria-label="mute scenes">
-        <span class="sq-mute-scenes__label" title="mute scenes: store which tracks are muted, and switch to it with one tap. Tap an empty slot to store, tap again to go back">mutes</span>
-        <button type="button" data-scene="0" aria-pressed="false">1</button>
-        <button type="button" data-scene="1" aria-pressed="false">2</button>
-        <button type="button" data-scene="2" aria-pressed="false">3</button>
-        <button type="button" data-scene="3" aria-pressed="false">4</button>
-      </div>
-      <button id="master-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="master: tone, glue compression and drive on the whole mix, before the limiter">master</button>
-    </div>
+    <!-- The master chain (master.js): tone, glue and drive on the whole mix. -->
+    <button id="master-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="master: tone, glue compression and drive on the whole mix, before the limiter">master</button>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
          (a timeline of pattern blocks). Tab cycles them. Desktop only. -->
@@ -654,10 +642,6 @@ export const STUDIO_BODY = String.raw`
       <button type="button" data-view="piano" aria-pressed="false" title="piano: the selected track's pattern as a full piano roll, the other tracks' notes behind it">piano</button>
       <button type="button" data-view="mix" aria-pressed="false" title="mix: a fader per track, and a second song on deck B with a crossfader, to blend two songs or move from one to the other">mix</button>
     </div>
-    <!-- The code drawer (codePanel.js): Strudel live coding, run into
-         the song without stopping the transport. -->
-    <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
-    <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <!-- Mobile only: the scale row and the chord cluster are hidden below 768px
          and this button hosts both in one modal (openChordMenu). Chord mode is
          not only a keyboard feature (a tapped step takes the chord too, see
@@ -750,6 +734,25 @@ export const STUDIO_BODY = String.raw`
         </span>
       </span>
     </div>
+    <!-- Havoc, fill, the mute scenes, code and vim: the things a hand reaches
+         for while playing, on the note row with the scale and the chord. -->
+    <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
+    <!-- The performance cluster (perform.js): the fill button the steps'
+         trig conditions read, and four mute scenes. -->
+    <div id="perf" class="sq-perf" role="group" aria-label="performance">
+      <button id="fill-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="fill: hold to play the steps set to 'fill only' and rest the ones set to 'not in a fill' (a step's condition is in its editor: right-click or long-press a note). A quick tap latches it">fill</button>
+      <div id="mute-scenes" class="sq-mute-scenes" role="group" aria-label="mute scenes">
+        <span class="sq-mute-scenes__label" title="mute scenes: store which tracks are muted, and switch to it with one tap. Tap an empty slot to store, tap again to go back">mutes</span>
+        <button type="button" data-scene="0" aria-pressed="false">1</button>
+        <button type="button" data-scene="1" aria-pressed="false">2</button>
+        <button type="button" data-scene="2" aria-pressed="false">3</button>
+        <button type="button" data-scene="3" aria-pressed="false">4</button>
+      </div>
+    </div>
+    <!-- The code drawer (codePanel.js): Strudel live coding, run into
+         the song without stopping the transport. -->
+    <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
+    <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <div id="status" class="sq-status sq-status--bar">click play to unlock audio</div>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
