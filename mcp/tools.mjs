@@ -208,6 +208,24 @@ export const TOOLS = [
       out: z.union([z.literal("master"), z.number().int()]).optional() },
     handler: (ctx, { track, ...opts }) => sb.setTrack(ctx.song, track, opts),
   },
+  {
+    name: "set_send", title: "Set send",
+    description: "A send: `amount` (0..1) of a track copied into an fx bus, beside wherever its output goes. The way to share ONE reverb or delay bus between several tracks at different amounts with their dry signal untouched (set_track's `out` moves the whole track into the bus instead). Put the bus's reverb or delay fully wet. The level is squared: 1 is unity, 0.5 is 12dB down. 0 removes the send.",
+    inputSchema: { track: trackArg, bus: z.number().int().min(0).describe("the fx bus track's index"), amount: z.number().min(0).max(1) },
+    handler: (ctx, { track, bus, amount }) => sb.setSend(ctx.song, track, bus, amount),
+  },
+  {
+    name: "set_master", title: "Set master",
+    description: "The master chain, on the whole mix before the limiter: low / mid / high in dB (-12..12: a shelf at 120Hz, a wide bell at 1kHz, a shelf at 6kHz), glue 0..1 (bus compression: 0.3 to 0.5 pulls a mix together) and drive 0..1 (saturation: density and harmonics). Everything at 0 is the bare sum of the tracks. Gentle settings: this is on every track at once.",
+    inputSchema: { low: z.number().min(-12).max(12).optional(), mid: z.number().min(-12).max(12).optional(), high: z.number().min(-12).max(12).optional(), glue: z.number().min(0).max(1).optional(), drive: z.number().min(0).max(1).optional() },
+    handler: (ctx, a) => sb.setMaster(ctx.song, a),
+  },
+  {
+    name: "set_mute_scene", title: "Set mute scene",
+    description: "One of the studio's four mute scenes (scene 0..3): the list of track indices muted when its button is tapped, for a drop or a breakdown played by hand; a second tap puts back the mutes from before. null empties the scene. It does not mute anything now (set_track's mute does).",
+    inputSchema: { scene: z.number().int().min(0).max(3), tracks: z.array(z.number().int().min(0)).nullable() },
+    handler: (ctx, { scene, tracks }) => sb.setMuteScene(ctx.song, scene, tracks),
+  },
 
   // ---- steps ------------------------------------------------------------------------
   {
@@ -224,9 +242,10 @@ export const TOOLS = [
   },
   {
     name: "set_step", title: "Set step",
-    description: "One step in detail: on, note, velocity 0..1, length in steps, chord (" + sb.CHORD_NAMES.join(" ") + "), complexity (inversion 0..4), ratchet (1..8 retriggers), offset (-0.5..0.5 of a step), arp + arpRate (beats per note) + arpRange (octaves) + arpDir, strum (ms between a chord's notes, -80..80: positive low to high, negative high to low), extraNotes (more pitches stacked on the step).",
+    description: "One step in detail: on, note, velocity 0..1, length in steps, chord (" + sb.CHORD_NAMES.join(" ") + "), complexity (inversion 0..4), ratchet (1..8 retriggers), prob (0..1: how often the step plays; under 1 it sits some passes out, differently each pass), cond (a trig condition: \"fill\" only while the studio's fill button is held, \"!fill\" only while it is not, \"first\" / \"!first\" the first pass or every other, or \"a:b\" the a-th of every b passes of the pattern, e.g. \"1:2\", \"4:4\" for a turnaround; \"\" clears it), offset (-0.5..0.5 of a step), arp + arpRate (beats per note) + arpRange (octaves) + arpDir, strum (ms between a chord's notes, -80..80: positive low to high, negative high to low), extraNotes (more pitches stacked on the step).",
     inputSchema: { track: trackArg, pattern: patternArg, step: z.number().int().min(0), on: z.boolean().optional(), note: z.union([z.string(), z.number(), z.null()]).optional(),
       velocity: z.number().optional(), length: z.number().int().optional(), chord: z.string().optional(), complexity: z.number().int().optional(), ratchet: z.number().int().optional(),
+      prob: z.number().min(0).max(1).optional(), cond: z.string().optional(),
       offset: z.number().optional(), arp: z.boolean().optional(), arpRate: z.number().optional(), arpRange: z.number().int().optional(), arpDir: z.enum(["up", "down", "updown", "random"]).optional(),
       strum: z.number().optional(), extraNotes: z.union([z.array(z.union([z.string(), z.number()])), z.string()]).nullable().optional() },
     handler: (ctx, { track, ...a }) => sb.setStep(ctx.song, track, a),

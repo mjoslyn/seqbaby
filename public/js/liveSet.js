@@ -44,6 +44,8 @@ import { sameTree } from "./historyStore.js";
 import { ICON_FINISH, ICON_NOW } from "./icons.js";
 import { applySampleSpeed } from "./lfo.js";
 import { applyMacroPads } from "./macro.js";
+import { setMaster } from "./master.js";
+import { applyMuteScenes } from "./perform.js";
 import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
@@ -54,7 +56,7 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } fro
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback, dropFeedbackSends, resolveSends } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, inSong, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
@@ -140,6 +142,9 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
     metersMoved = true;
   }
   if (pads && !sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, order);
+  // The mute scenes hold track indices too, so they wait with the pads.
+  if (pads && !sameTree(cur.muteScenes ?? null, target.muteScenes ?? null)) applyMuteScenes(target.muteScenes, order);
+  if (!sameTree(cur.master ?? null, target.master ?? null)) setMaster(target.master);
   return metersMoved;
 }
 
@@ -481,6 +486,7 @@ export function mergeSet(s, scope = null) {
     const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
     const bus = j >= 0 ? made[j] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    t.sends = resolveSends(td.sends, made, t);
     // The p-lock sounds' sidechain sources carry indices into the incoming
     // session too, on every track (a kept track's were copied in whole).
     resolveSoundSources(t, made);
@@ -496,6 +502,7 @@ export function mergeSet(s, scope = null) {
   for (const t of state.tracks) {
     if (t.out !== "master" && wouldFeedback(t, t.out)) t.out = "master";
   }
+  dropFeedbackSends();
 
   // The order the session lists, then the buses back to the bottom. Both after
   // the index passes above, for applySet's reason: every cross-track reference
@@ -526,6 +533,7 @@ export function mergeSet(s, scope = null) {
   // The pads store their assignments by index into the incoming session too.
   // (A scoped merge's pads are not the session's: its `done` keeps them.)
   if (!scope && !sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, made);
+  if (!scope && !sameTree(cur.muteScenes ?? null, target.muteScenes ?? null)) applyMuteScenes(target.muteScenes, made);
   if (names) { refreshOutputSelects(); refreshCompSourceDropdowns(); }
   if (grid || added || removed || rebuilt) { refreshAllPatternLockUI(); renderPatternGrid(); }
   setStatus(added || removed || rebuilt

@@ -18,7 +18,7 @@ import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, 
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
-import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback, dropFeedbackSends, resolveSends, serializeSends } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, inSong, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -26,6 +26,9 @@ import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
 import { buildVoiceForEngine, migrateGranularParams, stampGranularParams } from "./voices.js";
 import { haloTone } from "./engineData.js";
+import { serializeMaster, setMaster } from "./master.js";
+import { applyMuteScenes, serializeMuteScenes } from "./perform.js";
+import { normalizeCond, normalizeProb } from "./trigCond.js";
 
 
 /** @typedef {import("./types.js").AppState} AppState */
@@ -75,6 +78,11 @@ function serializeSongNow() {
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
     macroPads: serializeMacroPads(),
+    // The master chain (master.js) and the mute scenes (perform.js): each
+    // written only when there is something in it, so a song that uses
+    // neither is byte for byte what it was.
+    master: serializeMaster(),
+    muteScenes: serializeMuteScenes(),
     tracks: state.tracks.map(serializeTrack),
   };
 }
@@ -160,6 +168,9 @@ function serializeTrackFields(t) {
     compSourceIndex: t.comp?.source && t.comp.source !== "self"
       ? state.tracks.findIndex(x => String(x.id) === String(t.comp.source))
       : -1,
+    // Sends (signal.js): a share of the track into a bus beside its output,
+    // by index too. Written only when the track has one.
+    sends: serializeSends(t),
     isDrumKit: !!t.isDrumKit,
     glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
     pitchLock: t.pitchLock ?? true,
@@ -184,6 +195,8 @@ function serializeTrackFields(t) {
       strums:          (p.strums          ?? []).slice(),
       complexities:    (p.complexities    ?? []).slice(),
       ratchets:        (p.ratchets        ?? []).slice(),
+      probs:           (p.probs           ?? []).slice(),
+      conds:           (p.conds           ?? []).slice(),
       sampleStarts:    (p.sampleStarts    ?? []).slice(),
       sampleEnds:      (p.sampleEnds      ?? []).slice(),
       sampleFadeIns:   (p.sampleFadeIns   ?? []).slice(),
@@ -578,6 +591,8 @@ export function loadTrackFromData(t, td) {
         strums:          pad(p.strums,          0,      n),
         complexities:    pad(p.complexities,    0,      n),
         ratchets:        pad(p.ratchets,        1,      n),
+        probs:           pad(p.probs,           1,      n).map(normalizeProb),
+        conds:           pad(p.conds,           "",     n).map(normalizeCond),
         sampleStarts:    pad(p.sampleStarts,    0,      n),
         sampleEnds:      pad(p.sampleEnds,      1,      n),
         sampleFadeIns:   pad(p.sampleFadeIns,   0,      n),
@@ -762,6 +777,7 @@ export function applySet(s) {
     const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
     const bus = j >= 0 ? made[j] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    t.sends = resolveSends(td.sends, made, t);
     // Sidechain source. A session saved before compSourceIndex existed carries
     // only the id it had when it was written, and nothing in the file maps that
     // to a track — so those fall back to self rather than guess at a track and
@@ -779,6 +795,7 @@ export function applySet(s) {
   for (const t of state.tracks) {
     if (t.out !== "master" && wouldFeedback(t, t.out)) t.out = "master";
   }
+  dropFeedbackSends();
   refreshOutputSelects();
   if (state.ready) {
     refreshAllTrackOutputs();
@@ -795,6 +812,8 @@ export function applySet(s) {
   // After the tracks exist, so the stored indices resolve to real tracks — in
   // the order the file wrote them, not the order they now sit in.
   applyMacroPads(s.macroPads, made);
+  applyMuteScenes(s.muteScenes, made);
+  setMaster(s.master);
   // Every cross-track reference is an id by now, so the list can be reordered:
   // fx buses to the bottom, once, rather than under the loop above.
   placeBusesLast();

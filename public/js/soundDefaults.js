@@ -266,3 +266,80 @@ export const EUCLID_MOD_KEYS = ["pulses", "steps", "rotate"];
 export const EUCLID_MOD_LABELS = {
   pulses: "euclid pulses", steps: "euclid cycle", rotate: "euclid rotate",
 };
+
+// ---- the master chain (master.js) -------------------------------------------
+// Tone, glue and drive between the master gain and the safety limiter. Every
+// key is neutral by default and a neutral stage is out of the circuit, so a
+// song with no `master` plays exactly as it did before there was one.
+export const MASTER_DEFAULTS = { low: 0, mid: 0, high: 0, glue: 0, drive: 0 };
+export const MASTER_KEYS = Object.keys(MASTER_DEFAULTS);
+/** Each key's range: the three bands in dB, glue and drive 0..1. */
+export const MASTER_RANGE = { low: [-12, 12], mid: [-12, 12], high: [-12, 12], glue: [0, 1], drive: [0, 1] };
+export const MASTER_LABELS = { low: "low", mid: "mid", high: "high", glue: "glue", drive: "drive" };
+export const MASTER_TIPS = {
+  low: "low shelf at 120Hz, ±12dB: the weight of the whole mix",
+  mid: "a wide bell at 1kHz, ±12dB: forward or scooped",
+  high: "high shelf at 6kHz, ±12dB: air, or a darker mix",
+  glue: "bus compression on the whole mix: a slow attack that lets the drums through and pulls everything else together. 0 is out of the circuit",
+  drive: "saturation on the whole mix: density and harmonics before the limiter. 0 is out of the circuit",
+};
+
+/** A master config as stored: every key present, a number, inside its range. */
+export function normalizeMaster(m) {
+  const out = { ...MASTER_DEFAULTS };
+  if (!m || typeof m !== "object") return out;
+  for (const k of MASTER_KEYS) {
+    const v = Number(m[k]);
+    if (!Number.isFinite(v)) continue;
+    const [lo, hi] = MASTER_RANGE[k];
+    out[k] = Math.max(lo, Math.min(hi, v));
+  }
+  return out;
+}
+
+/** Whether a master config does nothing at all (and so is not written to a song). */
+export function masterIsNeutral(m) {
+  const n = normalizeMaster(m);
+  return MASTER_KEYS.every(k => Math.abs(n[k]) < 1e-6);
+}
+
+/**
+ * The glue compressor's settings for an amount 0..1, and the trim after it.
+ * A DynamicsCompressorNode adds makeup gain of its own (0.6 of the gain it
+ * takes off full scale, in dB), which at these thresholds is far more than a
+ * bus compressor should add, so the trim takes it back and leaves 0.6 of the
+ * reduction a -6dBFS peak gets: quiet passages come up a little, peaks land
+ * about where they were.
+ * @param {number} g 0..1
+ */
+export function glueSettings(g) {
+  const a = Math.max(0, Math.min(1, Number(g) || 0));
+  const threshold = -4 - 14 * a;
+  const ratio = 1.5 + 1.5 * a;
+  const autoMakeup = -0.6 * (threshold - threshold / ratio);
+  const peakCut = Math.max(0, (-6 - threshold) * (1 - 1 / ratio));
+  return { threshold, ratio, knee: 10, attack: 0.03, release: 0.22, trimDb: 0.6 * peakCut - autoMakeup };
+}
+
+/**
+ * The drive stage's two gains for an amount 0..1, around a fixed tanh curve
+ * (`driveCurve`): the input gain walks the signal up the curve, the output
+ * gain takes most of the level back.
+ * @param {number} d 0..1
+ */
+export function driveSettings(d) {
+  const a = Math.max(0, Math.min(1, Number(d) || 0));
+  const pre = 0.15 + 0.85 * Math.pow(a, 1.5);
+  const small = (DRIVE_K / Math.tanh(DRIVE_K)) * pre;      // the curve's gain for a small signal
+  return { pre, post: 1 / Math.pow(small, 1 - 0.25 * a) };
+}
+export const DRIVE_K = 3;
+/** The drive's transfer curve over -1..1: tanh, normalised to reach ±1. */
+export function driveCurve(n = 2049) {
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(DRIVE_K * x) / Math.tanh(DRIVE_K);
+  }
+  return c;
+}

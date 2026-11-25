@@ -11,7 +11,8 @@ import { updateGranularSpeedEnabled } from "./params.js";
 import { refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
 import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageCount, fxStageOff, renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
-import { renderStepGrid, repaintNudge } from "./stepGrid.js";
+import { renderStepGrid, repaintNudge, repaintTrig } from "./stepGrid.js";
+import { TRIG_CONDS, normalizeCond, normalizeProb, trigCondLabel } from "./trigCond.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
 import { holdNoiseBed } from "./signal.js";
 import { ensureAudio } from "./transport.js";
@@ -1248,6 +1249,15 @@ export function openStepEditor(t, idx, anchorEl) {
       <input class="se-offset" type="range" min="-0.5" max="0.5" step="0.01" value="${t.offsets?.[idx] ?? 0}" />
       <span class="se-offset-label"></span>
     </div>
+    <div class="sq-se__field sq-se__prob-row">
+      <label>chance</label>
+      <input class="se-prob" type="range" min="0" max="1" step="0.01" value="${normalizeProb(t.probs?.[idx])}" title="how often this step plays. 100% is always; lower and it sits some passes out, differently each pass" />
+      <span class="se-prob-label"></span>
+    </div>
+    <div class="sq-se__field sq-se__cond-row">
+      <label>when</label>
+      <select class="se-cond" title="a condition on this step: a pass of the pattern (1 of 2, 4 of 4 for a turnaround), only while the fill button is held, or only the first time round"></select>
+    </div>
     <div class="sq-se__field sq-se__sample-row" hidden>
       <label>sample</label>
       <div class="sq-se__sample-ctl">
@@ -1498,6 +1508,30 @@ export function openStepEditor(t, idx, anchorEl) {
     if (sel) sel.classList.add("is-selected");
   };
   refresh();
+
+  // Probability and trig condition (trigCond.js): whether the step plays this
+  // pass. The grid marks a step that has either.
+  const probInput = el.querySelector(".se-prob");
+  const probLbl = el.querySelector(".se-prob-label");
+  const condSel = el.querySelector(".se-cond");
+  const curCond = normalizeCond(t.conds?.[idx]);
+  for (const c of TRIG_CONDS.includes(curCond) ? TRIG_CONDS : [...TRIG_CONDS, curCond]) {
+    condSel.add(new Option(trigCondLabel(c), c));
+  }
+  condSel.value = curCond;
+  const paintProb = () => { probLbl.textContent = `${Math.round(normalizeProb(probInput.value) * 100)}%`; };
+  paintProb();
+  probInput.addEventListener("input", () => {
+    if (!t.probs) t.probs = new Array(t.length).fill(1);
+    t.probs[idx] = normalizeProb(probInput.value);
+    paintProb();
+    repaintTrig(t, idx);
+  });
+  condSel.addEventListener("change", () => {
+    if (!t.conds) t.conds = new Array(t.length).fill("");
+    t.conds[idx] = normalizeCond(condSel.value);
+    repaintTrig(t, idx);
+  });
 
   offsetInput.addEventListener("input", () => {
     if (!t.offsets) t.offsets = new Array(t.length).fill(0);

@@ -8,7 +8,7 @@ import { makeMetalizerCurve } from "./curves.js";
 import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
-import { fadeStop, holdParamAt } from "./paramHold.js";
+import { fadeStop, holdParamAt, tieParams } from "./paramHold.js";
 import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
@@ -88,12 +88,13 @@ export class PlaitsVoice {
     for (const v of this.pool) v.node[name].value = val;
   }
   getAudioParam(key) {
-    // For LFO modulation: route to all pool voices by returning the first voice's param.
-    // (LFO.connect only targets one param; chord tones on other pool voices won't pick up
-    // the modulation. For true poly mod, a per-voice LFO bus would be needed.)
+    // The first pool voice's param, with the other voices' tied to it
+    // (paramHold.js): an LFO or a lane then reaches every voice, so a chord's
+    // tones and a round-robin line all move together.
     if (key === "vol") return this.output.gain;
     const name = this._paramName(key);
-    return name ? this.pool[0].node[name] : null;
+    if (!name) return null;
+    return tieParams(this.pool[0].node[name], this.pool.slice(1).map(v => v.node[name]));
   }
   hit(midiNote, time, duration, velocity = 1) {
     const v = this.pool[this.voiceIdx];
@@ -182,7 +183,8 @@ export class PlaitsVoice {
 // trigger routes successive hits across voices.
 /**
  * Wrap `size` independent voices in a round-robin pool so chord tones spread
- * across them. getAudioParam returns voice 0's param only (LFO hits voice 0).
+ * across them. getAudioParam returns voice 0's param with every other voice's
+ * tied to it (paramHold.js's tieParams), so modulation reaches the whole pool.
  * @param {number} size
  * @param {() => any} buildOne  Builds one pooled voice.
  * @returns {{ trigger:Function, release:Function, setGlide:Function, setParam:Function, getAudioParam:(k:string)=>any }}
@@ -206,9 +208,9 @@ export function makePolyPool(size, buildOne) {
     release: (time) => voices.forEach(v => v.release?.(time)),
     setGlide: (g) => voices.forEach(v => v.setGlide?.(g)),
     setParam: (k, val) => voices.forEach(v => v.setParam?.(k, val)),
-    // LFO modulation targets only the first pool voice — identical limitation
-    // as PlaitsVoice's voice pool (documented in CLAUDE.md).
-    getAudioParam: (k) => voices[0].getAudioParam?.(k) ?? null,
+    // Voice 0's param, the rest of the pool's tied to it: whoever connects an
+    // LFO to it or ramps it does the same to each (fanOf, paramHold.js).
+    getAudioParam: (k) => tieParams(voices[0].getAudioParam?.(k) ?? null, voices.slice(1).map(v => v.getAudioParam?.(k) ?? null)),
   };
 }
 

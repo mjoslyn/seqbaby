@@ -1,4 +1,5 @@
 import { setStatus } from "./dom.js";
+import { upgradeKnobs } from "./knob.js";
 import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
@@ -186,15 +187,168 @@ function trackById(id) {
  * @param {Track} t @param {string|number} busId @returns {boolean}
  */
 export function wouldFeedback(t, busId) {
+  // Every way out of a track counts: its `out` and each of its sends (below).
+  // A search rather than a walk, since a track with sends has several.
   const seen = new Set();
-  let cur = trackById(busId);
-  while (cur) {
-    if (cur === t || seen.has(cur.id)) return true;
+  const stack = [trackById(busId)];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (!cur) continue;
+    if (cur === t) return true;
+    if (seen.has(cur.id)) continue;
     seen.add(cur.id);
-    if (!cur.out || cur.out === "master") return false;
-    cur = trackById(cur.out);
+    if (cur.out && cur.out !== "master") stack.push(trackById(cur.out));
+    for (const s of cur.sends || []) if (s.amt > 0) stack.push(trackById(s.bus));
   }
   return false;
+}
+
+// ---- sends: a share of a track into a bus, beside its output ------------
+//
+// `t.out` MOVES a track into a bus. A send copies some of it there and leaves
+// the track where it was: `t.sends = [{bus: <bus track id>, amt: 0..1}]`, the
+// tap the same one the output uses (the rack's output, so after the fader),
+// each through a gain of its own into the bus's summing input. That is what a
+// shared reverb is: three tracks at three amounts into one tank, dry signal
+// untouched. Outside the p-lock snapshot, like `out`. Serialized by track
+// INDEX (`sends: [{busIndex, amt}]`, written only when a track has one).
+
+/** A send's gain: squared, so the top of the knob is unity and half is -12dB. */
+export function sendGain(amt) {
+  const a = Math.max(0, Math.min(1, Number(amt) || 0));
+  return a * a;
+}
+
+/** The buses a track could send to: its own deck's, never itself, never a loop. */
+export function sendTargets(t) {
+  if (!t || t._deckBus) return [];
+  return state.tracks.filter(b => b.engineKey === "bus" && !b._deckBus && b !== t
+    && (b._deck || "") === (t._deck || "") && !wouldFeedback(t, b.id));
+}
+
+/** A track's send amount into a bus, 0 when it has none. */
+export function sendAmount(t, busId) {
+  return (t.sends || []).find(s => String(s.bus) === String(busId))?.amt ?? 0;
+}
+
+/**
+ * Set a track's send into a bus (0 removes it). Refuses a loop, and says so.
+ * @param {Track} t @param {string|number} busId @param {number} amt 0..1
+ */
+export function setTrackSend(t, busId, amt) {
+  const a = Math.max(0, Math.min(1, Number(amt) || 0));
+  const id = String(busId);
+  const list = (t.sends || []).filter(s => String(s.bus) !== id);
+  if (a > 0) {
+    const bus = trackById(id);
+    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || wouldFeedback(t, id)) {
+      setStatus("that send would feed back on itself, so it was left off");
+      t.sends = list;
+      syncTrackSends(t);
+      return;
+    }
+    list.push({ bus: id, amt: a });
+  }
+  t.sends = list;
+  syncTrackSends(t);
+  refreshBusSourceLabels();
+}
+
+/** A track's sends in the session format, or undefined when it has none. */
+export function serializeSends(t, tracks = state.tracks) {
+  const out = [];
+  for (const s of t.sends || []) {
+    const i = tracks.findIndex(x => String(x.id) === String(s.bus));
+    if (i >= 0 && s.amt > 0) out.push({ busIndex: i, amt: s.amt });
+  }
+  return out.length ? out : undefined;
+}
+
+/**
+ * A serialized track's sends as live ones: indices into the session resolved
+ * against the tracks made from it, as `outIndex` is.
+ * @param {any} list @param {Track[]} made @param {Track} t
+ */
+export function resolveSends(list, made, t) {
+  const out = [];
+  for (const s of Array.isArray(list) ? list : []) {
+    const bus = Number.isInteger(s?.busIndex) ? made[s.busIndex] : null;
+    const amt = Math.max(0, Math.min(1, Number(s?.amt) || 0));
+    if (!bus || bus === t || bus.engineKey !== "bus" || !(amt > 0)) continue;
+    if (out.some(x => x.bus === String(bus.id))) continue;
+    out.push({ bus: String(bus.id), amt });
+  }
+  return out;
+}
+
+/** Drop any send that closes a loop (a hand-edited song could describe one). */
+export function dropFeedbackSends() {
+  for (const t of state.tracks) {
+    if (!t.sends?.length) continue;
+    t.sends = t.sends.filter(s => !wouldFeedback(t, s.bus));
+  }
+}
+
+/**
+ * Make the audio graph agree with `t.sends`: a gain per send from the rack's
+ * output into the bus's input, faded in from silence and out to it, so a send
+ * appearing or going never steps. Called from routeTrackOutput, which is what
+ * runs after anything that rebuilds a voice or a rack.
+ * @param {Track} t
+ */
+export function syncTrackSends(t) {
+  const rack = t.fxRack;
+  const ctx = state.audioCtx;
+  if (!rack || !ctx) return;
+  const now = ctx.currentTime;
+  const drop = (rec) => {
+    try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setTargetAtTime(0, now, 0.008); } catch {}
+    setTimeout(() => { try { rec.from.disconnect(rec.g); } catch {} try { rec.g.disconnect(); } catch {} }, 80);
+  };
+  // A rebuilt rack has a new output node: the old gains hang off the old one.
+  if (t._sendRack !== rack) {
+    for (const rec of t._sendRecs?.values?.() || []) drop(rec);
+    t._sendRecs = new Map();
+    t._sendRack = rack;
+  }
+  const recs = t._sendRecs;
+  const want = new Map();
+  for (const s of t.sends || []) {
+    const bus = trackById(s.bus);
+    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || !(s.amt > 0)) continue;
+    if (String(t.out) === String(bus.id)) continue;      // the whole track already goes there
+    if (wouldFeedback(t, bus.id)) continue;
+    const input = bus.voice?.getInputNode?.();
+    if (input) want.set(String(bus.id), { input, amt: s.amt });
+  }
+  for (const [id, rec] of recs) {
+    const w = want.get(id);
+    if (!w || w.input !== rec.to) { drop(rec); recs.delete(id); }   // gone, or its bus was rebuilt
+  }
+  for (const [id, w] of want) {
+    let rec = recs.get(id);
+    if (!rec) {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      try { rack.output.connect(g); g.connect(w.input); } catch {}
+      rec = { g, to: w.input, from: rack.output };
+      recs.set(id, rec);
+    }
+    try { rec.g.gain.setTargetAtTime(sendGain(w.amt), now, 0.012); } catch {}
+  }
+}
+
+/** The buses a track's signal reaches directly: its output's, and its sends'. */
+function feedsOf(t) {
+  const out = [];
+  const main = sendOf(t);
+  if (main) out.push(main);
+  for (const s of t?.sends || []) {
+    if (!(s.amt > 0)) continue;
+    const b = trackById(s.bus);
+    if (b && b !== main) out.push(b);
+  }
+  return out;
 }
 
 /**
@@ -249,6 +403,7 @@ export function routeTrackOutput(t, swap = false) {
   // so re-pointing a track that was not moving was the whole mix dipping on
   // every one of them. A bus rebuilt has a new summing node, so its feeders'
   // `dest` is a different object and they are still re-pointed.
+  syncTrackSends(t);
   if (rack._routedTo === dest && rack._routedMeter === t.meterAnalyser) return;
   // `swap`: the new path carries the same signal at the same level as the
   // old one (the master, or a deck's bus at unity: mix.js), so there is
@@ -270,6 +425,8 @@ export function routeTrackOutput(t, swap = false) {
     try { rack.output.disconnect(); } catch {}
     if (dest) { try { rack.output.connect(dest); } catch {} }
     if (t.meterAnalyser) { try { rack.output.connect(t.meterAnalyser); } catch {} }
+    // the sends hang off the same node the line above just cleared
+    if (t._sendRack === rack) for (const rec of t._sendRecs?.values?.() || []) { try { rack.output.connect(rec.g); } catch {} }
   });
 }
 
@@ -680,15 +837,18 @@ export function soloAudibleTracks() {
   const audible = new Set(soloed);
   for (const t of state.tracks) {
     if (audible.has(t)) continue;
-    const seen = new Set();
-    let cur = t;
     // Bounded by `seen`: a loop can't be routed through the UI, but a
-    // hand-edited song could still describe one. `sendOf` follows a deck's
-    // bus too (mix.js), so soloing a deck keeps everything on it.
-    while (cur && !seen.has(cur.id)) {
+    // hand-edited song could still describe one. `feedsOf` follows a deck's
+    // bus too (mix.js), so soloing a deck keeps everything on it, and a
+    // track's sends, so soloing a shared reverb keeps what is sent to it.
+    const seen = new Set([t.id]);
+    const stack = feedsOf(t);
+    while (stack.length) {
+      const cur = stack.pop();
+      if (!cur || seen.has(cur.id)) continue;
+      if (cur.soloed) { audible.add(t); break; }
       seen.add(cur.id);
-      cur = sendOf(cur);
-      if (cur?.soloed) { audible.add(t); break; }
+      stack.push(...feedsOf(cur));
     }
   }
   return audible;
@@ -728,8 +888,54 @@ export function refreshOutputSelects() {
       sel.appendChild(opt);
     }
     sel.value = t.out || "master";
+    // Sends: a send whose bus has gone goes with it, and the track gets a
+    // knob per bus it could send to (not the one its whole output is on).
+    if (t.sends?.length) {
+      const kept = t.sends.filter(s => targets.some(b => String(b.id) === String(s.bus)));
+      if (kept.length !== t.sends.length) { t.sends = kept; syncTrackSends(t); }
+    }
+    paintSendKnobs(t, targets.filter(b => String(b.id) !== String(t.out)));
   }
   refreshBusSourceLabels();
+}
+
+/**
+ * A track's send knobs, one per bus it could send to, in `.sq-track__sends`.
+ * Rebuilt only when the list of buses (or a name) moved: this runs after every
+ * merge, and a knob being dragged must not be replaced under the pointer.
+ * @param {Track} t @param {Track[]} buses
+ */
+function paintSendKnobs(t, buses) {
+  const box = t.el?.querySelector(".sq-track__sends");
+  if (!box) return;
+  box.hidden = buses.length === 0;
+  const sig = buses.map(b => `${b.id}:${b.name || ""}`).join("|");
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig;
+    box.replaceChildren();
+    for (const b of buses) {
+      const field = document.createElement("div");
+      field.className = "sq-field sq-send";
+      const label = document.createElement("label");
+      label.textContent = `→ ${b.name?.trim() || `bus ${b.id}`}`;
+      const input = document.createElement("input");
+      input.type = "range"; input.min = "0"; input.max = "1"; input.step = "0.01";
+      input.className = "p-send";
+      input.dataset.bus = String(b.id);
+      input.title = `send: how much of this track also goes into ${b.name?.trim() || "this bus"}, beside where its output goes. 0 is off`;
+      input.setAttribute("aria-label", `send to ${b.name?.trim() || "bus"}`);
+      input.value = String(sendAmount(t, b.id));
+      input.addEventListener("input", () => setTrackSend(t, b.id, Number(input.value)));
+      field.append(label, input);
+      box.appendChild(field);
+    }
+    upgradeKnobs(box);
+    return;
+  }
+  for (const input of box.querySelectorAll(".p-send")) {
+    const v = String(sendAmount(t, input.dataset.bus));
+    if (input.value !== v && !input.matches(":active")) input.value = v;
+  }
 }
 
 // What each bus is carrying, written on the bus itself. Without it the routing
@@ -740,10 +946,15 @@ function refreshBusSourceLabels() {
     const el = t.el?.querySelector(".sq-track__bus-in");
     if (!el) continue;
     if (t.engineKey !== "bus") { el.hidden = true; el.textContent = ""; continue; }
-    const feeders = state.tracks.filter(x => x !== t && sendOf(x) === t);
+    const nm = (x) => x.name?.trim() || `track ${x.id}`;
+    const feeders = state.tracks.filter(x => x !== t && sendOf(x) === t).map(nm);
+    for (const x of state.tracks) {
+      const a = x !== t && sendOf(x) !== t ? sendAmount(x, t.id) : 0;
+      if (a > 0) feeders.push(`${nm(x)} ${Math.round(a * 100)}%`);
+    }
     el.hidden = false;
     el.textContent = feeders.length
-      ? `◂ ${feeders.map(x => x.name?.trim() || `track ${x.id}`).join(" · ")}`
+      ? `◂ ${feeders.join(" · ")}`
       : "◂ nothing sent here yet";
     el.title = feeders.length
       ? `${feeders.length} track${feeders.length === 1 ? "" : "s"} routed into this bus`

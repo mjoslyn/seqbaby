@@ -2,6 +2,7 @@ import { liveGeneratorOf, stepGateAt } from "./stepSource.js";
 import { updatePatternCell } from "./patternBar.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
+import { hasTrig, trigMark } from "./trigCond.js";
 import { closeStepEditor, openStepEditor } from "./stepEditor.js";
 import { SCALES, applyScale, midiToName, midiToScaleIndex, noteColor, scaleIndexToMidi } from "./theory.js";
 import { anchorCovering, extendNote, maxLengthAt, removeNote, startNote } from "./track.js";
@@ -77,6 +78,27 @@ export function markNudge(cell, offset) {
   else cell.style.removeProperty("--nudge");
 }
 
+/**
+ * A step that may sit a pass out (a probability under 100%, or a trig
+ * condition: trigCond.js) is hatched and carries a short mark in its corner.
+ * @param {HTMLElement} cell @param {number} [prob] @param {string} [cond]
+ */
+export function markTrig(cell, prob, cond) {
+  const on = hasTrig(prob, cond);
+  cell.classList.toggle("is-cond", on);
+  // a span of its own: the cell's pseudo-elements are the accent's and the held note's
+  let mark = cell.querySelector(".sq-step__trig");
+  if (!on) { mark?.remove(); return; }
+  if (!mark) { mark = document.createElement("span"); mark.className = "sq-step__trig"; cell.appendChild(mark); }
+  mark.textContent = trigMark(prob, cond);
+}
+
+/** Redraw one step's mark after its probability or condition changed (the step editor). */
+export function repaintTrig(t, idx) {
+  const cell = t.el?.querySelector(`.sq-steps .sq-step[data-idx="${idx}"]`);
+  if (cell?.classList.contains("is-on")) markTrig(cell, t.probs?.[idx], t.conds?.[idx]);
+}
+
 /** Redraw one note's tick after its offset changed (the step editor's slider), grid and roll. */
 export function repaintNudge(t, idx) {
   const cell = t.el?.querySelector(`.sq-steps .sq-step[data-idx="${idx}"]`);
@@ -140,6 +162,8 @@ export function makeCell(t, idx, span, on, isContinuation = false, velOverride, 
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
   markNudge(cell, on && !isContinuation ? t.offsets?.[idx] : 0);
+  // not under a live generator: its steps are not the written ones
+  if (on && !isContinuation && !liveGeneratorOf(t)) markTrig(cell, t.probs?.[idx], t.conds?.[idx]);
   if (on && note != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "sq-step__note";

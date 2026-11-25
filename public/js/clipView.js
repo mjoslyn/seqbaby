@@ -209,7 +209,7 @@ export function clipShadeColor(n) {
   return shade ? `hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)` : "";
 }
 
-const SIG_FIELDS = ["steps", "lengths", "notes", "velocities", "chords", "extraNotes", "extraLengths", "ratchets", "arps", "offsets", "strums"];
+const SIG_FIELDS = ["steps", "lengths", "notes", "velocities", "chords", "extraNotes", "extraLengths", "ratchets", "arps", "offsets", "strums", "probs", "conds"];
 
 /** A number per slot: which distinct clip it is on this track, in order of first appearance. Empty slots get -1. */
 export function clipShades(t) {

@@ -1770,6 +1770,7 @@ function lossyOf(t, pat) {
   if (hits.some(i => pat.strums?.[i] && (pat.chords?.[i] || pat.extraNotes?.[i]?.length))) out.push("strums");
   if (hits.some(i => pat.chords?.[i] && pat.complexities?.[i])) out.push("chord inversions");
   if (hits.some(i => Math.abs(pat.offsets?.[i] || 0) > 0.01)) out.push("nudged steps");
+  if (hits.some(i => (pat.probs?.[i] ?? 1) < 1 || pat.conds?.[i])) out.push("step chances and conditions");
   if (t.engineKey === "sampler" && hits.some(i => (pat.sampleStarts?.[i] || 0) > 0 || (pat.sampleEnds?.[i] ?? 1) < 1 || (pat.sampleLoopModes?.[i] || "off") !== "off")) out.push("sample regions");
   return out;
 }

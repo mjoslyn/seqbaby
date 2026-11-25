@@ -631,6 +631,19 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field sq-mobile-only sq-bpm-dial"><label for="bpm-dial">110 bpm</label><input id="bpm-dial" type="range" min="40" max="240" step="1" value="110" aria-label="bpm" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
+    <!-- The performance cluster (perform.js, master.js): the fill button the
+         steps' trig conditions read, four mute scenes, and the master chain. -->
+    <div id="perf" class="sq-perf" role="group" aria-label="performance">
+      <button id="fill-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="fill: hold to play the steps set to 'fill only' and rest the ones set to 'not in a fill' (a step's condition is in its editor: right-click or long-press a note). A quick tap latches it">fill</button>
+      <div id="mute-scenes" class="sq-mute-scenes" role="group" aria-label="mute scenes">
+        <span class="sq-mute-scenes__label" title="mute scenes: store which tracks are muted, and switch to it with one tap. Tap an empty slot to store, tap again to go back">mutes</span>
+        <button type="button" data-scene="0" aria-pressed="false">1</button>
+        <button type="button" data-scene="1" aria-pressed="false">2</button>
+        <button type="button" data-scene="2" aria-pressed="false">3</button>
+        <button type="button" data-scene="3" aria-pressed="false">4</button>
+      </div>
+      <button id="master-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="master: tone, glue compression and drive on the whole mix, before the limiter">master</button>
+    </div>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
          (a timeline of pattern blocks). Tab cycles them. Desktop only. -->
@@ -827,6 +840,9 @@ export const STUDIO_BODY = String.raw`
         <div class="sq-field sq-track__out-field" hidden><label>out</label>
           <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus and its filter, effects, mod matrix and automation lanes act on all of them at once"><option value="master">master</option></select>
         </div>
+        <!-- Sends (signal.js): a knob per fx bus this track could also feed,
+             beside where its output goes. Filled by refreshOutputSelects. -->
+        <div class="sq-track__sends" hidden></div>
         <span class="sq-track__bus-in" hidden></span>
         <div class="sq-field sq-vol__field"><label>vol</label>
           <div class="sq-vol-combo" title="volume (drag) + output level">

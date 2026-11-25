@@ -44,7 +44,7 @@ export { EUCLID_DEFAULTS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefa
 // this list, so a new per-step array is added in one place.
 const EUCLID_FIELDS = [
   "steps", "lengths", "notes", "velocities", "chords", "offsets",
-  "arps", "arpRates", "arpRanges", "arpDirs", "strums", "ratchets", "complexities",
+  "arps", "arpRates", "arpRanges", "arpDirs", "strums", "ratchets", "complexities", "probs", "conds",
   "extraNotes", "extraLengths",
 ];
 
@@ -335,6 +335,8 @@ export function applyEuclid(t, cfg, pat) {
     if (p.offsets)      p.offsets[i] = 0;
     if (p.arps)         p.arps[i] = false;
     if (p.ratchets)     p.ratchets[i] = 1;
+    if (p.probs)        p.probs[i] = 1;
+    if (p.conds)        p.conds[i] = "";
     if (p.complexities) p.complexities[i] = 0;
     // Stacked piano-roll notes only sound on an active step, so a step the
     // rhythm just switched back on would otherwise play someone else's chord.

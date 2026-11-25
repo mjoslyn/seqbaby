@@ -3,7 +3,9 @@ import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote } from "./euclid.js";
-import { stepGateAt } from "./stepSource.js";
+import { liveGeneratorOf, stepGateAt } from "./stepSource.js";
+import { stepFires } from "./trigCond.js";
+import { initMasterChain } from "./master.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
@@ -181,7 +183,9 @@ export async function ensureAudio() {
     state.masterLimiter.ratio.value = 20;
     state.masterLimiter.attack.value = 0.002;
     state.masterLimiter.release.value = 0.1;
-    state.masterGain.connect(state.masterLimiter);
+    // Between the two sits the master chain (master.js): tone, glue and
+    // drive, each out of the circuit until it is turned up.
+    initMasterChain();
     state.masterLimiter.connect(state.audioCtx.destination);
     state.masterAnalyser = state.audioCtx.createAnalyser();
     state.masterAnalyser.fftSize = 1024;
@@ -572,8 +576,9 @@ export async function startPlayback(opts = {}) {
       let slot = 0; // sub-tick offset (for speed > 1, multiple steps per global tick)
       while (t.speedAccum >= 1) {
         t.speedAccum -= 1;
-        const idx = (t.trackTick ?? 0) % t.length;
-        t.trackTick = (t.trackTick ?? 0) + 1;
+        const count = t.trackTick ?? 0;
+        const idx = count % t.length;
+        t.trackTick = count + 1;
         // Where this step actually lands: the grid slot, pushed by master swing
         // (odd steps only) and the step's own micro-nudge.
         const swingOffset = (idx % 2 === 1) ? effDur * masterSwing : 0;
@@ -603,6 +608,14 @@ export async function startPlayback(opts = {}) {
         // by handing them back on the gate.
         const gate = stepGateAt(t, idx);
         if (isBus || !gate) { slot++; continue; }
+        // A written step may be withheld: its probability and trig condition
+        // (trigCond.js), counted in passes of the pattern since the track's
+        // count last started. A generator's steps are its own decisions and
+        // are left alone. The lane and the playhead above ran regardless.
+        if (!liveGeneratorOf(t) && ((t.probs?.[idx] ?? 1) < 1 || t.conds?.[idx])
+          && !stepFires({ prob: t.probs?.[idx], cond: t.conds?.[idx], pass: Math.floor(count / t.length), fill: state.fill, seed: t.id | 0, step: idx })) {
+          slot++; continue;
+        }
         const span = gate.span;
         // A note lasts its written step length. Voices that honor `duration`
         // (Plaits, samples, melodic synths) follow it; drum-synth recipes with

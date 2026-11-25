@@ -8,6 +8,7 @@ import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
 import { canModulate, eqParam, fxCopyView } from "./lfo.js";
 import { setParam } from "./params.js";
+import { fanOf } from "./paramHold.js";
 import { cutoffToHz, resonToQ, setFilter } from "./signal.js";
 import { eqFromUnit, eqValue } from "./soundDefaults.js";
 import { granFromUnit } from "./voices.js";
@@ -51,13 +52,15 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // Helper: cancel any in-flight automation at or after `time`, pin the current
   // segment start, and ramp to the next step's physical value by the end.
   const ramp = (param, physFrom, physTo) => {
-    if (!param) return;
-    try {
-      param.cancelScheduledValues(time);
-      param.setValueAtTime(physFrom, time);
-      param.linearRampToValueAtTime(physTo, endT);
-    } catch {
-      try { param.value = physTo; } catch {}
+    // every copy of it: a pooled voice has one per voice (paramHold.js)
+    for (const p of fanOf(param)) {
+      try {
+        p.cancelScheduledValues(time);
+        p.setValueAtTime(physFrom, time);
+        p.linearRampToValueAtTime(physTo, endT);
+      } catch {
+        try { p.value = physTo; } catch {}
+      }
     }
   };
 

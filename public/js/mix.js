@@ -58,7 +58,7 @@ import { applyBusMute, placeBusesLast, setActiveTrack } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback, resolveSends } from "./signal.js";
 import { aliasPattern, inSong, nextChainPattern, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, quantizeToScale } from "./theory.js";
@@ -261,7 +261,7 @@ function loadDeckBInner(blob, info = {}) {
     bus: null,
     loading: true,
     pending: tds.slice(), made: [], _recBlob: blob,
-    refs: tds.map(td => ({ out: td.outIndex, comp: td.compSourceIndex })),
+    refs: tds.map(td => ({ out: td.outIndex, comp: td.compSourceIndex, sends: td.sends })),
   };
   // read by the transport for every note this deck plays (noteForStep)
   d.scale = d.globals.scale;
@@ -390,6 +390,7 @@ function finishLoad(d) {
     if (!t) return;
     const bus = Number.isInteger(ref.out) && ref.out >= 0 ? made[ref.out] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    t.sends = resolveSends(ref.sends, made, t);
     resolveSoundSources(t, made, true);
     const src = Number.isInteger(ref.comp) && ref.comp >= 0 ? made[ref.comp] : null;
     t.comp.source = src && src !== t ? String(src.id) : "self";

@@ -468,3 +468,97 @@ test("an fx stage more than once: a copy is made by naming it, ordered, modulate
   assert.deepEqual(s.tracks[0].fxConfig.order, ["gain", "delay"]);
   assert.throws(() => sb.setFx(s, 0, "delay", null), /only a copy/);
 });
+
+// ---- trig conditions, sends, the master chain, mute scenes -------------------
+
+test("a step takes a probability and a trig condition, and refuses a bad one", () => {
+  const s = song();
+  sb.addTrack(s, { engine: "dm:808-kick" });
+  sb.setSteps(s, 0, { steps: "x...x...x...x..." });
+  sb.setStep(s, 0, { step: 4, prob: 0.5, cond: "1:2" });
+  sb.setStep(s, 0, { step: 12, cond: "fill" });
+  const p = s.tracks[0].patterns[0];
+  assert.equal(p.probs[4], 0.5); assert.equal(p.conds[4], "1:2");
+  assert.equal(p.conds[12], "fill"); assert.equal(p.probs[12], 1);
+  assert.equal(p.probs[0], 1); assert.equal(p.conds[0], "");
+  const d = sb.describePattern(s.tracks[0], 0);
+  assert.ok(JSON.stringify(d).includes('"cond":"1:2"'));
+  assert.throws(() => sb.setStep(s, 0, { step: 0, cond: "3:2" }), /unknown cond/);
+  assert.throws(() => sb.setStep(s, 0, { step: 0, prob: 1.5 }), /prob/);
+  sb.setStep(s, 0, { step: 4, cond: "" });
+  assert.equal(p.conds[4], "");
+  assert.equal(sb.validate(s).ok, true);
+});
+
+test("a send copies a track into a bus, by index, and refuses what would loop", () => {
+  const s = song();
+  sb.addTrack(s, { engine: "dm:808-kick" });
+  sb.addTrack(s, { engine: "dm:poly-saw" });
+  sb.addTrack(s, { engine: "bus", name: "room" });
+  sb.addTrack(s, { engine: "bus", name: "echo" });
+  sb.setSend(s, 0, 2, 0.3);
+  sb.setSend(s, 1, 2, 0.6);
+  sb.setSend(s, 1, 3, 0.4);
+  assert.deepEqual(s.tracks[0].sends, [{ busIndex: 2, amt: 0.3 }]);
+  assert.deepEqual(s.tracks[1].sends, [{ busIndex: 2, amt: 0.6 }, { busIndex: 3, amt: 0.4 }]);
+  assert.equal(s.tracks[0].outIndex, -1);                    // the dry signal stays on the master
+  assert.deepEqual(sb.summarizeTrack(s, 1).sends, [{ bus: 2, amount: 0.6 }, { bus: 3, amount: 0.4 }]);
+  assert.deepEqual(sb.validate(s).warnings.filter(w => /nothing sent/.test(w)), []);
+  // replaced, not doubled; 0 removes
+  sb.setSend(s, 1, 2, 0.2);
+  assert.equal(s.tracks[1].sends.find(x => x.busIndex === 2).amt, 0.2);
+  sb.setSend(s, 0, 2, 0);
+  assert.equal(s.tracks[0].sends, undefined);
+  assert.throws(() => sb.setSend(s, 0, 1, 0.5), /not an fx bus/);
+  assert.throws(() => sb.setSend(s, 2, 2, 0.5), /itself/);
+  // a bus sending into a bus that already reaches it is a loop, by send or by output
+  sb.setSend(s, 2, 3, 0.5);
+  assert.throws(() => sb.setSend(s, 3, 2, 0.5), /feed back/);
+  assert.throws(() => sb.setTrack(s, 3, { out: 2 }), /feed back/);
+  // a track whose whole output is on the bus has nothing to add with a send
+  sb.setTrack(s, 0, { out: 3 });
+  assert.throws(() => sb.setSend(s, 0, 3, 0.5), /whole output/);
+  assert.equal(sb.validate(s).ok, true);
+});
+
+test("removing a track renumbers the sends and the mute scenes", () => {
+  const s = song();
+  sb.addTrack(s, { engine: "dm:808-kick" });
+  sb.addTrack(s, { engine: "dm:808-snare" });
+  sb.addTrack(s, { engine: "bus", name: "room" });
+  sb.setSend(s, 1, 2, 0.5);
+  sb.setMuteScene(s, 0, [0, 1]);
+  sb.setMuteScene(s, 2, [1]);
+  sb.removeTrack(s, 0);
+  assert.deepEqual(s.tracks[0].sends, [{ busIndex: 1, amt: 0.5 }]);
+  assert.deepEqual(s.muteScenes, [[0], null, [0], null]);
+  sb.removeTrack(s, 1);                                       // the bus goes, and the send with it
+  assert.equal(s.tracks[0].sends, undefined);
+});
+
+test("the master chain is written only when something is on, inside its ranges", () => {
+  const s = song();
+  assert.equal(s.master, undefined);
+  sb.setMaster(s, { glue: 0.4, low: 2 });
+  assert.deepEqual(s.master, { low: 2, mid: 0, high: 0, glue: 0.4, drive: 0 });
+  assert.deepEqual(sb.summarize(s).master, s.master);
+  sb.setMaster(s, { drive: 0.2 });
+  assert.equal(s.master.glue, 0.4);                           // the rest stays
+  assert.throws(() => sb.setMaster(s, { low: 20 }), /low/);
+  assert.throws(() => sb.setMaster(s, { width: 1 }), /unknown master setting/);
+  sb.setMaster(s, { glue: 0, low: 0, drive: 0 });
+  assert.equal(s.master, undefined);
+  assert.equal(sb.summarize(s).master, undefined);
+});
+
+test("a mute scene is a list of track indices, and an empty set of scenes is not written", () => {
+  const s = song();
+  sb.addTrack(s, { engine: "dm:808-kick" });
+  sb.addTrack(s, { engine: "dm:808-snare" });
+  sb.setMuteScene(s, 1, [1, 1, 0]);
+  assert.deepEqual(s.muteScenes, [null, [1, 0], null, null]);
+  assert.throws(() => sb.setMuteScene(s, 4, [0]), /scene/);
+  assert.throws(() => sb.setMuteScene(s, 0, [7]), /track/);
+  sb.setMuteScene(s, 1, null);
+  assert.equal(s.muteScenes, undefined);
+});

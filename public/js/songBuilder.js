@@ -54,7 +54,7 @@ import {
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
   BREATH_NUM_CTLS, BREATH_SEL_CTLS, BREATH_TONE_NAMES, breathTone, breathToneDescription,
 } from "./engineData.js";
-import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams, MASTER_KEYS, MASTER_RANGE, masterIsNeutral, normalizeMaster } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, PATTERN_MODES, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -63,6 +63,7 @@ import {
 import { CHANCE_DEFAULT_PCS, CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { isTrigCond } from "./trigCond.js";
 import { arrangementBars, blocksEnd, checkBlock, describeBlocks, normalizeBlocks } from "./arrangement.js";
 
 /** What every refusal in this module throws: a message an agent can act on. */
@@ -390,7 +391,7 @@ export function emptyPatternBlob(len) {
   return {
     steps: fill(0), lengths: fill(0), notes: fill(null), velocities: fill(0.5), chords: fill(""),
     offsets: fill(0), arps: fill(false), arpRates: fill(0.25), arpRanges: fill(1), arpDirs: fill("up"), strums: fill(0),
-    complexities: fill(0), ratchets: fill(1),
+    complexities: fill(0), ratchets: fill(1), probs: fill(1), conds: fill(""),
     sampleStarts: fill(0), sampleEnds: fill(1), sampleFadeIns: fill(0), sampleFadeOuts: fill(0), sampleLoopModes: fill("off"),
     extraNotes: fill(null), extraLengths: fill(null),
     automation: {},
@@ -475,7 +476,14 @@ export function removeTrack(song, index) {
   const i = int(index, "track", 0, song.tracks.length - 1);
   song.tracks.splice(i, 1);
   const fix = (j) => j === i ? -1 : j > i ? j - 1 : j;
-  for (const t of song.tracks) { t.outIndex = fix(t.outIndex ?? -1); t.compSourceIndex = fix(t.compSourceIndex ?? -1); }
+  for (const t of song.tracks) {
+    t.outIndex = fix(t.outIndex ?? -1); t.compSourceIndex = fix(t.compSourceIndex ?? -1);
+    if (t.sends) {
+      t.sends = t.sends.filter(s => s.busIndex !== i).map(s => ({ ...s, busIndex: fix(s.busIndex) }));
+      if (!t.sends.length) delete t.sends;
+    }
+  }
+  if (song.muteScenes) song.muteScenes = song.muteScenes.map(s => s ? s.filter(j => j !== i).map(fix) : null);
   for (const pad of song.macroPads || []) for (const axis of ["x", "y"]) {
     pad[axis] = (pad[axis] || []).filter(a => a.track !== i).map(a => ({ ...a, track: fix(a.track) }));
   }
@@ -518,14 +526,84 @@ export function setTrack(song, index, opts = {}) {
       if (j === i) fail("a track cannot send to itself");
       if (bus.engineKey !== "bus") fail(`track ${j} (${bus.name}) is not an fx bus; add one with engine "bus"`);
       // Refuse a loop, as applySet would (wouldFeedback, signal.js).
-      for (let k = j, hops = 0; k >= 0 && hops < song.tracks.length; hops++) {
-        if (k === i) fail(`sending track ${i} to bus ${j} would feed back (bus ${j} already reaches track ${i})`);
-        k = song.tracks[k].outIndex ?? -1;
-      }
+      if (reaches(song, j, i)) fail(`sending track ${i} to bus ${j} would feed back (bus ${j} already reaches track ${i})`);
       t.outIndex = j;
     }
   }
   return summarizeTrack(song, i);
+}
+
+/** Whether track `from`'s signal reaches track `to`, by outputs and sends. */
+function reaches(song, from, to) {
+  const seen = new Set();
+  const stack = [from];
+  while (stack.length) {
+    const k = stack.pop();
+    if (k === to) return true;
+    if (k == null || k < 0 || seen.has(k) || !song.tracks[k]) continue;
+    seen.add(k);
+    stack.push(song.tracks[k].outIndex ?? -1);
+    for (const s of song.tracks[k].sends || []) if (s.amt > 0) stack.push(s.busIndex);
+  }
+  return false;
+}
+
+/**
+ * A send: `amount` (0..1) of a track copied into an fx bus, beside wherever
+ * its output goes. The way to share one reverb or delay between tracks at
+ * different amounts with the dry signal left alone (`setTrack`'s `out` moves
+ * the whole track instead). 0 removes the send. The level is squared: 1 is
+ * unity, 0.5 is 12dB down.
+ */
+export function setSend(song, index, bus, amount) {
+  const t = trackAt(song, index);
+  const i = int(index, "track");
+  const j = int(bus, "bus", 0, song.tracks.length - 1);
+  const amt = num(amount, "amount", 0, 1);
+  const b = song.tracks[j];
+  if (j === i) fail("a track cannot send to itself");
+  if (b.engineKey !== "bus") fail(`track ${j} (${b.name}) is not an fx bus; add one with engine "bus"`);
+  const rest = (t.sends || []).filter(s => s.busIndex !== j);
+  if (amt > 0) {
+    if (t.outIndex === j) fail(`track ${i} already has its whole output on bus ${j}; a send there would add nothing`);
+    if (reaches(song, j, i)) fail(`sending track ${i} to bus ${j} would feed back (bus ${j} already reaches track ${i})`);
+    rest.push({ busIndex: j, amt });
+  }
+  if (rest.length) t.sends = rest; else delete t.sends;
+  return summarizeTrack(song, i);
+}
+
+/**
+ * The master chain, on the whole mix before the limiter: `low` / `mid` /
+ * `high` in dB (-12..12: a shelf at 120Hz, a wide bell at 1kHz, a shelf at
+ * 6kHz), `glue` 0..1 (bus compression) and `drive` 0..1 (saturation). All 0
+ * is the bare sum of the tracks, and is not written to the song.
+ */
+export function setMaster(song, opts = {}) {
+  const m = normalizeMaster(song.master);
+  for (const k of MASTER_KEYS) {
+    if (opts[k] == null) continue;
+    const [lo, hi] = MASTER_RANGE[k];
+    m[k] = num(opts[k], k, lo, hi);
+  }
+  for (const k of Object.keys(opts)) if (!MASTER_KEYS.includes(k)) fail(`unknown master setting ${JSON.stringify(k)}; one of ${MASTER_KEYS.join(", ")}`);
+  if (masterIsNeutral(m)) delete song.master; else song.master = m;
+  return { master: m };
+}
+
+/**
+ * A mute scene: which tracks are muted when the studio's mute button `scene`
+ * (0..3) is tapped. `tracks` is a list of track indices, or null to empty it.
+ * A second tap in the studio puts back the mutes from before.
+ */
+export function setMuteScene(song, scene, tracks) {
+  const k = int(scene, "scene", 0, 3);
+  const list = Array.isArray(song.muteScenes) ? song.muteScenes.slice(0, 4) : [];
+  while (list.length < 4) list.push(null);
+  list[k] = tracks == null ? null
+    : [...new Set((Array.isArray(tracks) ? tracks : [tracks]).map(j => int(j, "track", 0, song.tracks.length - 1)))];
+  if (list.some(Boolean)) song.muteScenes = list; else delete song.muteScenes;
+  return { muteScenes: song.muteScenes ?? [null, null, null, null] };
 }
 
 // ---- steps and notes -----------------------------------------------------------------
@@ -610,7 +688,9 @@ export function setNotes(song, index, { pattern = 0, notes } = {}) {
 /**
  * One step in full. `on` switches it; `note`, `velocity` (0..1), `length` (in
  * steps), `chord` (a chord type: maj, min, min7 ...), `complexity` (chord
- * inversion 0..4), `ratchet` (1..8 retriggers), `offset` (-0.5..0.5 of a step),
+ * inversion 0..4), `ratchet` (1..8 retriggers), `prob` (0..1, how often the
+ * step plays), `cond` (a trig condition: fill, !fill, first, !first, or a:b for
+ * the a-th of every b passes of the pattern), `offset` (-0.5..0.5 of a step),
  * `arp` + `arpRate` (beats per arp note) + `arpRange` (octaves 1..4) +
  * `arpDir` (up/down/updown/random), `strum` (ms between the stack's notes,
  * -80..80: positive low to high, negative high to low), `extraNotes` (more
@@ -632,6 +712,12 @@ export function setStep(song, index, opts = {}) {
   }
   if (opts.complexity != null) pat.complexities[i] = int(opts.complexity, "complexity", 0, 4);
   if (opts.ratchet != null) pat.ratchets[i] = int(opts.ratchet, "ratchet", 1, 8);
+  if (opts.prob != null) pat.probs[i] = num(opts.prob, "prob", 0, 1);
+  if (opts.cond != null) {
+    const c = String(opts.cond).trim();
+    if (!isTrigCond(c)) fail(`unknown cond ${JSON.stringify(opts.cond)}; "" (always), fill, !fill, first, !first, or a:b for the a-th of every b passes (1:2, 3:4 ... up to 8:8)`);
+    pat.conds[i] = c;
+  }
   if (opts.offset != null) pat.offsets[i] = num(opts.offset, "offset", -0.5, 0.5);
   if (opts.arp != null) pat.arps[i] = !!opts.arp;
   if (opts.arpRate != null) pat.arpRates[i] = num(opts.arpRate, "arpRate", 0.0625, 4);
@@ -1116,6 +1202,8 @@ function describeStep(pat, i) {
   if (pat.chords[i]) out.chord = pat.chords[i];
   if (pat.complexities[i]) out.complexity = pat.complexities[i];
   if (pat.ratchets[i] > 1) out.ratchet = pat.ratchets[i];
+  if (pat.probs?.[i] != null && pat.probs[i] < 1) out.prob = pat.probs[i];
+  if (pat.conds?.[i]) out.cond = pat.conds[i];
   if (pat.offsets[i]) out.offset = pat.offsets[i];
   if (pat.arps[i]) out.arp = { rate: pat.arpRates[i], range: pat.arpRanges[i], dir: pat.arpDirs[i] };
   if (pat.strums?.[i]) out.strum = pat.strums[i];
@@ -1145,7 +1233,7 @@ export function describePattern(t, p) {
   for (let i = 0; i < n; i++) {
     if (!pat.steps[i]) continue;
     const d = describeStep(pat, i);
-    if (d.chord || d.ratchet || d.arp || d.extraNotes || (d.length > 1) || d.offset || d.complexity) extras.push(d);
+    if (d.chord || d.ratchet || d.arp || d.extraNotes || (d.length > 1) || d.offset || d.complexity || d.prob != null || d.cond) extras.push(d);
   }
   return { pattern: p, steps: str, hits: notes.length, ...(anyNote ? { notes } : {}), ...(extras.length ? { detail: extras } : {}), ...(lanes.length ? { automation: lanes } : {}), ...(pat.soundLocked ? { soundLocked: true } : {}) };
 }
@@ -1174,6 +1262,7 @@ export function summarizeTrack(song, index) {
     ...(t.muted ? { muted: true } : {}), ...(t.soloed ? { soloed: true } : {}),
     ...(t.glide ? { glide: t.glide } : {}), ...(t.speed !== 1 ? { speed: t.speed } : {}),
     out: (t.outIndex ?? -1) >= 0 ? t.outIndex : "master",
+    ...(t.sends?.length ? { sends: t.sends.map(s => ({ bus: s.busIndex, amount: s.amt })) } : {}),
     patterns,
   };
   return out;
@@ -1223,6 +1312,8 @@ export function summarize(song) {
         : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean),
       sections: songSections(song) },
+    ...(song.master ? { master: song.master } : {}),
+    ...(song.muteScenes?.some(Boolean) ? { muteScenes: song.muteScenes } : {}),
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),
   };
 }
@@ -1237,7 +1328,10 @@ export function validate(song) {
     if ((t.outIndex ?? -1) >= 0 && song.tracks[t.outIndex]?.engineKey !== "bus") errors.push(`track ${i} sends to track ${t.outIndex}, which is not an fx bus`);
     if (t.engineKey !== "bus" && !(t.patterns || []).some(p => p && p.steps?.some(Boolean)) && !t.euclid?.on && !t.chance?.on)
       warnings.push(`track ${i} (${t.name}) has no steps, no euclid and no chance: it will be silent`);
-    if (t.engineKey === "bus" && !song.tracks.some(o => o.outIndex === i)) warnings.push(`bus ${i} (${t.name}) has nothing sent to it`);
+    for (const s of t.sends || []) {
+      if (song.tracks[s.busIndex]?.engineKey !== "bus") errors.push(`track ${i} has a send to track ${s.busIndex}, which is not an fx bus`);
+    }
+    if (t.engineKey === "bus" && !song.tracks.some(o => o.outIndex === i || (o.sends || []).some(s => s.busIndex === i && s.amt > 0))) warnings.push(`bus ${i} (${t.name}) has nothing sent to it`);
   });
   if (song.patternMode === "chain" && song.tracks?.length) {
     const played = songSections(song);

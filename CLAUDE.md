@@ -211,6 +211,14 @@ env / fx / eq / comp / mod / automation per track.
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.
 - `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
+- `trigCond.js` — whether a written step fires this pass: its probability
+  and trig condition (`stepFires`, `TRIG_CONDS`). **No imports**; tested in
+  `test/trigCond.test.js`. See the trig conditions section.
+- `perform.js` — the transport's performance cluster: the fill button
+  (`state.fill`) and the four mute scenes. See the fill and mute scenes
+  section.
+- `master.js` — the master chain: tone, glue and drive between the master
+  gain and the limiter, and its panel. See the master chain section.
 - `session.js` — serialize/apply sets + track patches, legacy migration, and
   `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
   (the same list main.js builds at boot) by running a blank blob through
@@ -548,10 +556,13 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   the sample auditions hold them for the sample's length, each closing a 1.5s
   tail after the note so a release is not cut off. A hand-played note goes
   through mute, so its hold does as well.
-- Master bus: `masterGain` → `masterLimiter` (DynamicsCompressor as brickwall
-  safety, threshold −2dB ratio 20) → destination.
+- Master bus: `masterGain` → the master chain (`master.js`: EQ, glue, drive,
+  each out of the circuit until turned up) → `masterLimiter`
+  (DynamicsCompressor as brickwall safety, threshold −2dB ratio 20) →
+  destination. See the master chain section below.
 - Where the rack's output goes is `t.out` — `"master"` or an fx bus track's id
-  (`routeTrackOutput` in signal.js). See the fx bus section below.
+  (`routeTrackOutput` in signal.js). See the fx bus section below. A share of
+  it can ALSO go into a bus (`t.sends`, the same section).
 
 ## Bitcrush (`crusher.js`) — a converter, not a rounding function
 
@@ -1000,9 +1011,10 @@ is why `d3lvl` / `hexop_3lvl` / `hexop.3lvl` are one control with three
 spellings rather than a consistent one.
 
 `makePolyPool` exposes `trigger` (round-robin) / `release` / `setGlide` /
-`setParam` (broadcast) / `getAudioParam` (voice 0 only — LFO mod hits voice 0,
-chord tones on other voices play the baseline; same limitation as
-`PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
+`setParam` (broadcast) / `getAudioParam` (voice 0's param with every other
+voice's tied to it, `tieParams` in paramHold.js, as `PlaitsVoice` does: an
+LFO or a lane reaches the whole pool, see "Modulation reaches every voice of
+a pool" under Gotchas). The stock harm/timb/morph/decay sliders are relabeled
 per-engine by `updatePlaitsControlsVisibility`.
 
 ## Ladder (`dm:ladder`, `public/js/ladder.js`)
@@ -1295,8 +1307,8 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   only moves the amp's.
 
 - **Polyphony lives inside the processor** (8 voices, steal-quietest), not in
-  `makePolyPool`. That's a real gain: a pool exposes only voice 0's params to
-  modulation, while one node with one param set modulates the whole instrument.
+  `makePolyPool`. One node with one param set modulates the whole instrument
+  (a pool has a param per voice and fans a source out to each, paramHold.js).
 - **Control blocks** — envelopes, cutoff and filter coefficients update every 16
   samples, so `tan()` runs at 3 kHz rather than per sample. Note events are
   handled at block boundaries (≤0.33 ms late, never early).
@@ -2550,10 +2562,13 @@ WINDOW   first step · last step
 ### Pattern (per track, 32 slots — every field a per-step parallel array)
 
 `steps, lengths, notes, velocities, chords, offsets, arps, arpRates,
-arpRanges, arpDirs, strums, complexities, ratchets, sampleStarts, sampleEnds,
+arpRanges, arpDirs, strums, complexities, ratchets, probs, conds, sampleStarts, sampleEnds,
 sampleFadeIns, sampleFadeOuts, sampleLoopModes, extraNotes, extraLengths,
 automation`
 
+- `probs` / `conds` — whether a written step plays this pass: a probability
+  (0..1, 1 the default) and a trig condition (`""`, `a:b`, `fill`, `!fill`,
+  `first`, `!first`). See the trig conditions section below.
 - `extraNotes`/`extraLengths` — stacked polyphony per step (from the piano
   roll), on top of the chord/root.
 - `strums` — ms between a step's stacked notes (chord tones and extras), by
@@ -3886,6 +3901,167 @@ drums ─┘   (fader, vol)      one filter, one rack, one mod matrix, one set o
   track node, which style.css uses to hide the step grid, the roll, the dice,
   the octave shifts, the patch buttons and the envelope — a bus plays no notes.
 
+### Sends — a share of a track into a bus, beside its output
+
+`t.out` MOVES a track into a bus. A send copies some of it there and leaves
+the track where it was, which is what a shared reverb is: three tracks at
+three amounts into one tank, dry signals untouched.
+
+- **`t.sends = [{bus: <bus track id>, amt: 0..1}]`**, live. The tap is the
+  one the output uses (`fxRack.output`, so after the fader), through a gain
+  per send into the bus's summing input. The level is squared (`sendGain`):
+  the top of the knob is unity, half is 12dB down.
+- **`syncTrackSends(t)` makes the graph agree**, called at the top of
+  `routeTrackOutput` (so after anything that rebuilds a voice or a rack, and
+  on every merge). A send appearing starts at gain 0 and rises; one going
+  falls and is disconnected after. The records are on the track
+  (`_sendRecs`, keyed by bus id, with the node each was connected FROM and
+  TO): a rebuilt rack (`_sendRack`) or a rebuilt bus input drops and remakes
+  them. `routeTrackOutput`'s re-point does `output.disconnect()`, which takes
+  the sends off too, so it reconnects them in the same task.
+- **Serialized as `sends: [{busIndex, amt}]`**, a track INDEX for `outIndex`'s
+  reason, written only when a track has one (`serializeSends`), so a song
+  without sends is byte for byte what it was. Resolved wherever `outIndex`
+  is: `applySet`, `mergeSet`'s third pass (for kept and fresh tracks alike,
+  so an undo puts a send back with no branch in `applyTrackInPlace`), a mix
+  deck's `finishLoad` (`refs`), and `duplicateTrack` copies them by id.
+- **A loop is refused through either kind of edge.** `wouldFeedback` is a
+  search over every way out of a track (its `out` and each send), not a walk
+  down one chain; `setTrackSend` refuses and says so, `dropFeedbackSends`
+  cleans a hand-edited song, and the builder's `reaches` is the same search.
+- **Solo follows sends too** (`feedsOf`): soloing a shared reverb keeps what
+  is sent to it, as soloing a bus keeps what is routed into it.
+- **Outside p-lock**, like `out`. **Not a mod target**: a send amount takes no
+  LFO, lane or pad yet (a reverb throw is still a lane on the bus's own wet).
+- UI: a small knob per bus a track could send to, in `.sq-track__sends`
+  beside the `out` select, built by `paintSendKnobs` from
+  `refreshOutputSelects` (which also prunes a send whose bus has gone). The
+  row is rebuilt only when the list of buses or a name moved, since that
+  function runs after every merge and a knob under the pointer must not be
+  replaced. Not offered for the bus the track's whole output is already on.
+  On a phone the row takes a line of its own under vol. The bus's `◂` line
+  lists senders with their amounts.
+- Builder: `setSend(song, track, bus, amount)` (MCP `set_send`),
+  `summarizeTrack().sends`, `validate` counting a send as something reaching
+  a bus.
+
+## Trig conditions and step probability (`trigCond.js`)
+
+A written step always played. Now it carries two more per-step fields,
+`probs[i]` (0..1) and `conds[i]`, and the transport asks `stepFires` before
+firing it. That is what lets a one-bar loop evolve: a hat at 70%, a ghost
+snare on every other pass, a turnaround on the fourth.
+
+```
+""        always
+a:b       the a-th of every b passes of the pattern (1:2, 4:4 ... to 8:8)
+fill      only while the fill button is held        !fill   only while it is not
+first     only the first pass                       !first  every pass but it
+```
+
+- **The condition is asked first, the dice only for a step it lets through**,
+  so a `1:2` step at 50% never plays on the second pass.
+- **A pass is `floor(trackTick / length)`**, the track's own count since it
+  last started: a play press, or a bar-line switch (`restartTrackCounts`).
+  So in chain mode a pattern's conditions count within its repeats and start
+  over when it comes round again, and a polymetric track counts its own
+  passes.
+- **The dice are a hash of (track id, step, pass)** (`trigRoll`), never
+  `Math.random()`: chanceGen.js's bargain. A step differs pass to pass, the
+  same play from the top repeats, and the picks go through Murmur3's
+  finalizer so the low bits of step and pass do not line up into a period.
+  Track ids are handed out afresh on load, so a reloaded song rolls a
+  different sequence (the random square LFO's rule).
+- **Only written steps.** A live generator's steps are its own decisions:
+  the transport skips the check under `liveGeneratorOf(t)` and the grid draws
+  no mark. Lanes and the playhead run on a withheld step as on any step.
+- **The fields travel wherever a step's fields do**: `emptyPattern` /
+  `aliasPattern` (`t.probs`, `t.conds`), `clonePattern` (generic), the
+  serializer and loader (`normalizeProb` / `normalizeCond` on the way in),
+  resize / truncate / extend / shift (track.js), `NOTE_STEP_KEYS` so a note
+  moved in the piano roll keeps them, the clip view's signature, the
+  builder's `emptyPatternBlob` and the patch preview's copy of it. `removeNote`
+  and the three generators' writes reset them, or the next note written on a
+  step would inherit a 30% nobody set.
+- **UI**: the step editor's `chance` knob and `when` select; the grid hatches
+  a step that has either and prints what decides it in the corner (`50%`,
+  `1:2`, `F`: `markTrig`, a span of its own since the cell's pseudo-elements
+  are the accent's and the held note's).
+- **Code cannot hold them**: `lossyOf` (strudel.js) lists "step chances and
+  conditions", so a track that has any is written as a comment and a run
+  leaves it alone, as with arps and nudges.
+- Builder: `setStep`'s `prob` / `cond` (MCP `set_step`), read back in
+  `describePattern`'s `detail`.
+
+## Fill and mute scenes (`perform.js`)
+
+The transport's performance cluster (`#perf`: fill, `mutes 1 2 3 4`, master),
+on every device; on a phone it is a line of its own under the icon row.
+
+- **Fill is `state.fill`**, which only trig conditions read. Hold the button
+  for as long as the fill lasts; a press shorter than 260ms latches it until
+  the next tap. Pointer-captured, so a finger sliding off does not end it.
+  Performance state: not saved, not in undo, not shared in a jam, and not in
+  a recorded set.
+- **A mute scene is a stored set of muted tracks** (`state.muteScenes`, four
+  slots of track ids or null). A tap on an empty slot stores the mutes as
+  they stand; a tap on a stored one applies it at once (`applyMutes`, which
+  does everything a mute button does, and clears solo on a track it mutes);
+  a second tap puts back the mutes from before (`_muteBefore`, kept across a
+  move from scene to scene), so a drop is two taps. Shift-click or a long
+  press stores over a slot, alt-click or a right-click clears it.
+- **Scenes are the song's, which one is in force is not.** Serialized as
+  `muteScenes`, by track INDEX as the macro pads are, only when a slot is
+  filled; applied by `applySet`, `applyGlobalsInPlace` and `mergeSet` where
+  the pads are (after the tracks exist). Mutes themselves were always in the
+  session, so a scene tap is an ordinary edit to undo and a jam.
+- The song's own tracks only (`inSong`): a mix deck's are not in a scene.
+- Builder: `setMuteScene(song, scene, tracks)` (MCP `set_mute_scene`).
+
+## The master chain (`master.js`)
+
+```
+masterGain ─▶ [EQ low · mid · high] ─▶ [GLUE + trim] ─▶ [DRIVE] ─▶ masterLimiter ─▶ out
+```
+
+The master was a gain into a safety limiter, so every song left the app as
+the bare sum of its tracks. This is the stage a mix bus has, opened from the
+transport's `master` button (lit while anything is on).
+
+- **`state.master = {low, mid, high, glue, drive}`** (`MASTER_DEFAULTS`,
+  soundDefaults.js): three bands in dB (±12: a shelf at 120Hz, a bell at 1kHz
+  Q 0.7, a shelf at 6kHz), glue and drive 0..1. All zero is neutral.
+- **A neutral stage is out of the circuit, not set to do nothing.** A
+  DynamicsCompressorNode delays its signal by its lookahead and adds makeup
+  gain whatever its ratio, and an oversampled waveshaper filters, so a "glue
+  0" left in the path would have changed every old song. `wire()` connects
+  only the stages that are on, in one task: the links that come are made
+  before the links that go are taken away. Crossing zero on glue or drive is
+  therefore a few milliseconds of path change; inside the range every write
+  is a `setTargetAtTime`.
+- **Glue** (`glueSettings`): threshold −4 to −18dB, ratio 1.5 to 3, a 30ms
+  attack that lets drums through, knee 10. The node's own makeup (0.6 of
+  what it takes off full scale, in dB) is far more than a bus compressor
+  should add, so a trim after it takes that back and leaves 0.6 of the cut a
+  −6dBFS peak gets. The panel reads the node's `reduction` live.
+- **Drive** (`driveSettings`, `driveCurve`): a fixed tanh curve, 4x
+  oversampled, between an input gain that walks the signal up it and an
+  output gain that takes most of the level back (a small signal keeps its
+  level within a quarter dB at the bottom and gains under 3dB at the top).
+- **Saved as `master`, only when something is on** (`serializeMaster`), so it
+  is undoable, shared in a jam and versioned like any global;
+  `applySet` / `applyGlobalsInPlace` write it through `setMaster`. Outside
+  p-lock. A song with no `master` loads neutral, so a landed mix deck brings
+  its own.
+- **Not a mod target**, and the analyser that feeds the master meter and the
+  clip indicator still taps `masterGain`, before the chain. Bounce and the
+  compose panel's listen take the limiter's output, so both hear it.
+- **Reasoned, not measured** against any hardware: the ranges are what a mix
+  bus usually wants. The limiter after it is still the plain safety
+  compressor, not a lookahead limiter. `test/master.test.js` pins the
+  arithmetic; the nodes are the browser's.
+- Builder: `setMaster(song, {...})` (MCP `set_master`), `summarize().master`.
+
 ## Macro pads (`macro.js`) — a Kaoss pad for the whole session
 
 Several XY pads, each axis driving a list of parameters that **may span
@@ -4980,7 +5156,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (41 tools on stdio, 39 of them shared with the compose panel, which lacks
+- **The MCP server holds one song** and keeps the tool list short (44 tools on stdio, 42 of them shared with the compose panel, which lacks
   `share_song` and `audition_song`:
   song / engines / genres / tracks / steps / sound / modulation / generators / code /
   out). `list_genres` / `genre_brief` are the groove picker for an agent:
@@ -6120,8 +6296,17 @@ through a 6ms fade on its gain).
   tolerates it. Everything in "Audio start / unlock" above is load-bearing.
 - **Plaits `modLevelPatched=1, modLevel=0` at init** — without the zero,
   empty tracks emit a continuous tone.
-- **Voice-pool LFO limitation** — `getAudioParam` returns voice 0's param
-  only (pools and PlaitsVoice both).
+- **Modulation reaches every voice of a pool.** A pooled voice
+  (`PlaitsVoice`'s four oscillators, `makePolyPool`'s copies) has one copy of
+  each parameter per voice, and `getAudioParam` can return one object. It
+  returns voice 0's with the others tied to it (`tieParams`, paramHold.js, a
+  WeakMap re-tied on every call), and the two places that act on a voice
+  param act on each copy (`fanOf`): `connectMod` in lfo.js connects the mod
+  source to every one, and automation.js's `ramp` ramps every one. Before,
+  both reached voice 0 only: a modulated chord had one moving note, and a
+  round-robin line was modulated every fourth note. Anything new that
+  connects to or schedules a param from `getAudioParam` should go through
+  `fanOf` too. `test/paramFan.test.js`.
 - **`canModulate` gates the mod picker** — new mod targets need `LFO_KEYS` +
   `getModTarget` + `LFO_AMP_SCALE` + `canModulate`, and a `getAudioParam(key)`
   on the voice/builder for voice-internal params.
@@ -6223,7 +6408,11 @@ through a 6ms fade on its gain).
 - New automation target → `AUTOMATION_TARGETS` + a setter path in
   `applyAutomationAtStep`, + the same `CONTROL_TARGETS` entry.
 - New per-step control → array on `emptyPattern()` + `aliasPattern()` field +
-  step-editor UI + consume in the transport loop + serialize/apply.
+  step-editor UI + consume in the transport loop + serialize/apply, and the
+  field lists that copy a step by name: track.js (resize, truncate, extend),
+  `NOTE_STEP_KEYS` / `BLANK_STEP` (rollNotes.js), `EUCLID_FIELDS`, the clip
+  view's `SIG_FIELDS`, `emptyPatternBlob` (songBuilder.js) and
+  `app/home/patchPreview.js`. `probs` / `conds` are the latest worked example.
 - New per-track sound setting → if it should follow p-lock, add it to
   `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
   pattern will leave it behind on a switch.
@@ -6261,7 +6450,8 @@ through a 6ms fade on its gain).
 
 - Undo is in memory and per page: a reload starts a fresh stack, and it is
   capped at 100 states.
-- Voice-pool LFO only targets voice 0.
+- A send amount and the master chain take no LFO, lane or macro pad.
+- The fill button is not recorded in a live set, and has no key.
 - Bounce is real-time capture (offline rendering would need rebuilding voices
   under an OfflineAudioContext, which the Plaits WASM voice doesn't support).
 - Keyboard performance mode is desktop-only.
@@ -6307,7 +6497,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 98 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 101 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

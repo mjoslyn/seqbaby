@@ -21,6 +21,8 @@ import { announceClips } from "./clips.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
+import { initPerform } from "./perform.js";
+import { initMasterUI } from "./master.js";
 import { installKnobRecord } from "./knobRecord.js";
 import { installSetRecorder } from "./setRecorder.js";
 import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -771,6 +773,9 @@ export function init() {
   const kbdChordPanel = document.getElementById("kbd-chord");
   const kbdCaptureBtn = document.getElementById("kbd-capture");
   if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
+  // Fill, the mute scenes and the master panel: every device.
+  initPerform();
+  initMasterUI();
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
     initVim();

@@ -29,7 +29,7 @@
 /** Every per-step array a note's step carries (the pattern's own list). */
 export const NOTE_STEP_KEYS = [
   "lengths", "notes", "velocities", "chords", "offsets",
-  "arps", "arpRates", "arpRanges", "arpDirs", "strums", "complexities", "ratchets",
+  "arps", "arpRates", "arpRanges", "arpDirs", "strums", "complexities", "ratchets", "probs", "conds",
   "sampleStarts", "sampleEnds", "sampleFadeIns", "sampleFadeOuts", "sampleLoopModes",
   "extraNotes", "extraLengths",
 ];
@@ -37,7 +37,7 @@ export const NOTE_STEP_KEYS = [
 /** The value an empty step holds in each array (state.js's emptyPattern). */
 export const BLANK_STEP = {
   steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "", offsets: 0,
-  arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up", strums: 0, complexities: 0, ratchets: 1,
+  arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up", strums: 0, complexities: 0, ratchets: 1, probs: 1, conds: "",
   sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0, sampleLoopModes: "off",
   extraNotes: null, extraLengths: null,
 };

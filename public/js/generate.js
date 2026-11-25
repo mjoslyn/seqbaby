@@ -56,6 +56,8 @@ export function randomizeMelody(t) {
   t.offsets?.fill(0);
   if (t.arps)         t.arps.fill(false);
   if (t.ratchets)     t.ratchets.fill(1);
+  if (t.probs)        t.probs.fill(1);
+  if (t.conds)        t.conds.fill("");
   if (t.complexities) t.complexities.fill(0);
 
   const meter = patternMeter(t._patternIdx ?? state.activePattern);

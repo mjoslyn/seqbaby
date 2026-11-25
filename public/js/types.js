@@ -140,6 +140,8 @@
  * @property {number[]} strums         ms between a chord's notes: + low to high, - high to low, 0 together.
  * @property {number[]} complexities   Chord inversion / voicing level 0..4.
  * @property {number[]} ratchets       Retrigger count 1..8.
+ * @property {number[]} probs          How often a written step plays, 0..1 (trigCond.js).
+ * @property {string[]} conds          Trig condition: "" always, "a:b", "fill", "!fill", "first", "!first".
  * @property {number[]} sampleStarts   0..1.
  * @property {number[]} sampleEnds     0..1.
  * @property {number[]} sampleFadeIns  seconds.

@@ -116,6 +116,21 @@ export const state = {
   // every pattern switch would be unplayable.
   /** @type {import("./types.js").MacroPad[]} */
   macroPads: [],
+  // The fill button (main.js): while true, steps conditioned "fill" play and
+  // "!fill" ones rest (trigCond.js). Performance state, never saved.
+  fill: false,
+  // Mute scenes (muteScenes.js): four stored sets of muted tracks, by id, or
+  // null for an empty slot. `_muteScene` is the one in force and `_muteBefore`
+  // the mutes it replaced, which a second tap puts back; neither is saved.
+  /** @type {(number[]|null)[]} */
+  muteScenes: [null, null, null, null],
+  _muteScene: -1,
+  /** @type {number[]|null} */
+  _muteBefore: null,
+  // The master chain (master.js): tone, glue and drive between the master
+  // gain and the safety limiter. All neutral by default.
+  /** @type {any} */
+  master: null,
   // The mix (mix.js): other songs on decks of their own, their tracks in
   // `tracks` beside the song's but flagged (`_deck`, `_deckBus`) and never
   // saved. Null when none is loaded.
@@ -168,6 +183,8 @@ export function emptyPattern(len) {
     strums:    new Array(len).fill(0),          // ms between a chord's notes: + low to high, - high to low, 0 together
     complexities: new Array(len).fill(0),       // chord inversion / voicing level
     ratchets: new Array(len).fill(1),           // retrigger the single note N times across the step
+    probs: new Array(len).fill(1),              // how often a written step plays, 0..1 (trigCond.js)
+    conds: new Array(len).fill(""),             // its trig condition: "" always, "1:2", "fill", "!fill", "first", "!first"
     sampleStarts: new Array(len).fill(0),       // sample-engine start offset (0..1 of buffer)
     sampleEnds:   new Array(len).fill(1),       // sample-engine end offset   (0..1 of buffer)
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
@@ -258,6 +275,8 @@ export function aliasPattern(t, idx) {
   t.strums       = p.strums       ?? (p.strums       = new Array(p.steps.length).fill(0));
   t.complexities = p.complexities ?? (p.complexities = new Array(p.steps.length).fill(0));
   t.ratchets     = p.ratchets     ?? (p.ratchets     = new Array(p.steps.length).fill(1));
+  t.probs        = p.probs        ?? (p.probs        = new Array(p.steps.length).fill(1));
+  t.conds        = p.conds        ?? (p.conds        = new Array(p.steps.length).fill(""));
   t.sampleStarts = p.sampleStarts ?? (p.sampleStarts = new Array(p.steps.length).fill(0));
   t.sampleEnds   = p.sampleEnds   ?? (p.sampleEnds   = new Array(p.steps.length).fill(1));
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));

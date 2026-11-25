@@ -902,6 +902,11 @@ main {
 }
 .sq-track__bus-in[hidden] { display: none; }
 .sq-track__out-field[hidden] { display: none !important; }
+/* A track's sends: a small knob per fx bus (signal.js, paintSendKnobs). */
+.sq-track__sends { display: inline-flex; gap: 8px; align-items: flex-end; }
+.sq-track__sends[hidden] { display: none !important; }
+.sq-track__sends .sq-send { --knob-size: 26px; }
+.sq-track__sends .sq-send label { max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-2); }
 
 .sq-track__head {
   display: flex;
@@ -1981,6 +1986,22 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   background-image: linear-gradient(to right,
     transparent calc(var(--nudge-x) - 1px), rgba(255,255,255,0.9) calc(var(--nudge-x) - 1px),
     rgba(255,255,255,0.9) calc(var(--nudge-x) + 1px), transparent calc(var(--nudge-x) + 1px));
+}
+/* A step that may sit a pass out (stepGrid.js's markTrig: a probability or a
+   trig condition): hatched, with what decides it in the corner. */
+.sq-steps .sq-step.is-on.is-cond {
+  background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0 3px, transparent 3px 7px);
+}
+.sq-steps .sq-step.is-on.is-cond.is-nudged {
+  background-image: linear-gradient(to right,
+    transparent calc(var(--nudge-x) - 1px), rgba(255,255,255,0.9) calc(var(--nudge-x) - 1px),
+    rgba(255,255,255,0.9) calc(var(--nudge-x) + 1px), transparent calc(var(--nudge-x) + 1px)),
+    repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0 3px, transparent 3px 7px);
+}
+.sq-step__trig {
+  position: absolute; right: 2px; bottom: 1px;
+  font-size: 8px; line-height: 1; letter-spacing: -0.02em;
+  color: rgba(0,0,0,0.75); pointer-events: none; white-space: nowrap;
 }
 /* Step input's cursor (keyboard.js): record armed, transport stopped. Marked on
    the active track's grid always, drawn only in that mode. */
@@ -3424,6 +3445,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   /* Macro sits in the main cluster, ahead of the others in the markup, so it
      is ordered after them explicitly: last in the group, after session. */
   .sq-transport #macro-pads { order: 3; }
+  /* fill, the mute scenes and master: a line of their own under the icons */
+  .sq-transport .sq-perf { order: 4; flex: 1 1 100%; justify-content: space-between; }
+  .sq-transport .sq-perf #fill-btn, .sq-transport .sq-perf #master-btn { min-height: 40px; padding: 0 14px; }
+  .sq-transport .sq-mute-scenes button { min-height: 40px; min-width: 40px; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
   .sq-transport #metronome,
@@ -3666,6 +3691,11 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      own underneath. Given a fixed column it keeps its size and solo / mute /
      p-lock come up beside it, which is one row per track less to scroll past.
      The meter narrows to the knob's column; it reads a level, not a number. */
+  /* The sends (a knob per fx bus, only once a bus exists) take a line of their
+     own under the vol row: beside `out` they squeezed the name to two letters. */
+  .sq-track__head .sq-track__sends { order: 19; flex: 0 0 100%; justify-content: flex-start; gap: 14px; }
+  .sq-track__head .sq-track__sends .sq-send { flex-direction: row; align-items: center; gap: 6px; }
+  .sq-track__head .sq-track__sends .sq-send label { max-width: 14ch; font-size: 11px; }
   .sq-track__head .sq-vol__field { flex: 0 0 auto; order: 10; }
   .sq-track__head .sq-vol-combo { width: 52px; }
   .sq-track__head .sq-track__solo,
@@ -4870,6 +4900,24 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-view-switch button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; }
 .sq-view-switch button + button { border-left: 1px solid var(--border); }
 .sq-view-switch button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
+/* The performance cluster (perform.js, master.js): fill, mute scenes, master. */
+.sq-perf { display: inline-flex; gap: 6px; align-items: center; }
+#fill-btn { touch-action: none; user-select: none; -webkit-user-select: none; }
+#fill-btn.is-on { background: var(--accent); border-color: var(--accent); color: #0b0d10; }
+#master-btn.is-on { color: var(--accent); border-color: var(--accent); }
+.sq-mute-scenes { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.sq-mute-scenes__label { font-size: 11px; color: var(--fg-dim); padding: 0 6px; }
+.sq-mute-scenes button { border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 4px 8px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; opacity: 0.55; }
+.sq-mute-scenes button.is-set { opacity: 1; color: var(--fg); }
+.sq-mute-scenes button[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; opacity: 1; }
+/* The master panel (master.js). */
+.sq-master__modal { max-width: 520px; }
+.sq-master__hint { margin: 0 0 12px; font-size: 12px; color: var(--fg-dim); }
+.sq-master__row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.sq-master__field { display: flex; flex-direction: column; align-items: center; gap: 4px; --knob-size: 48px; }
+.sq-master__val { font-size: 11px; color: var(--fg-dim); min-width: 6ch; text-align: center; }
+.sq-master__tools { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; }
+.sq-master__gr { font-size: 12px; color: var(--accent-2); min-height: 1em; font-variant-numeric: tabular-nums; }
 body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks, body.view-mix #tracks { display: none; }
 /* the pattern bar is the groove view's: the clip view's scene row and the
    arrangement's own toggle do its jobs there */

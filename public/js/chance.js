@@ -334,6 +334,8 @@ export function applyChance(t, pat) {
     if (p.offsets)      p.offsets[i] = 0;
     if (p.arps)         p.arps[i] = false;
     if (p.ratchets)     p.ratchets[i] = 1;
+    if (p.probs)        p.probs[i] = 1;
+    if (p.conds)        p.conds[i] = "";
     if (p.complexities) p.complexities[i] = 0;
     // Stacked piano-roll notes only sound on an active step, so a step the throw
     // just switched back on would otherwise play someone else's chord.

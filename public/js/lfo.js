@@ -7,6 +7,7 @@ import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { eqToUnit, eqValue, splitEqKey } from "./soundDefaults.js";
 import { setParam } from "./params.js";
+import { fanOf } from "./paramHold.js";
 import { aliasPattern, state } from "./state.js";
 import { GRAN_DEFAULTS, granFromUnit, granToUnit } from "./voices.js";
 
@@ -340,8 +341,11 @@ export function getModTarget(t, key) {
 // unchanged: disconnect/dispose still remove the edge, and now leave the base
 // behind rather than a zero.
 function connectMod(source, param) {
-  try { Tone.connect(source, param); }
-  catch (e) { console.warn("mod connect failed", e); }
+  // Every copy of the param: a pooled voice has one per voice (fanOf).
+  for (const p of fanOf(param)) {
+    try { Tone.connect(source, p); }
+    catch (e) { console.warn("mod connect failed", e); }
+  }
 }
 export { TRACK_FX_LFO_KEYS } from "./constants.js";
 // FX params with no AudioParam / Signal handle — driven by a JS-side LFO that

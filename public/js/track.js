@@ -51,6 +51,7 @@ export function createTrack({ name, engineKey, length = totalSteps(), params = n
     // deliberately outside the p-lock snapshot — a send that rewired itself at
     // every pattern switch would be a trap, not a feature.
     out: "master",
+    sends: [],
     isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
     sampleSpeedMode: "native",
@@ -175,6 +176,7 @@ export function duplicateTrack(src) {
   // reverb bus and having it land dry on the master would be a surprise), and
   // keeps its sidechain: both are ids into this same session.
   dup.out = src.out || "master";
+  dup.sends = (src.sends || []).map(s => ({ ...s }));
   dup.comp.source = src.comp?.source ?? "self";
 
   // On the pattern its source is on, which a launched clip may have put off
@@ -356,6 +358,8 @@ export function resizePattern(t, patIdx, len) {
   p.strums      = pad(p.strums, 0);
   p.complexities= pad(p.complexities, 0);
   p.ratchets    = pad(p.ratchets, 1);
+  p.probs       = pad(p.probs, 1);
+  p.conds       = pad(p.conds, "");
   p.sampleStarts    = pad(p.sampleStarts, 0);
   p.sampleEnds      = pad(p.sampleEnds, 1);
   p.sampleFadeIns   = pad(p.sampleFadeIns, 0);
@@ -455,7 +459,7 @@ export function truncatePattern(t, patIdx, newLen) {
   if (newLen >= oldLen) return;
   const KEYS = [
     "steps","lengths","notes","velocities","chords","offsets",
-    "arps","arpRates","arpRanges","arpDirs","strums","complexities","ratchets",
+    "arps","arpRates","arpRanges","arpDirs","strums","complexities","ratchets","probs","conds",
     "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
     "extraNotes","extraLengths",
   ];
@@ -499,7 +503,7 @@ export function extendPatternByDuplicate(t, patIdx, newLen, opts = {}) {
   const FILL = {
     steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "",
     offsets: 0, arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up", strums: 0,
-    complexities: 0, ratchets: 1,
+    complexities: 0, ratchets: 1, probs: 1, conds: "",
     sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
     sampleLoopModes: "off",
     extraNotes: null,
@@ -774,6 +778,10 @@ export function removeNote(t, anchor) {
   t.chords[anchor] = "";
   if (t.extraNotes) t.extraNotes[anchor] = null;
   if (t.extraLengths) t.extraLengths[anchor] = null;
+  // A removed note takes its probability and condition with it, or the next
+  // note written here would inherit a 30% nobody set on it.
+  if (t.probs) t.probs[anchor] = 1;
+  if (t.conds) t.conds[anchor] = "";
 }
 
 // ---- rendering ---------------------------------------------------------

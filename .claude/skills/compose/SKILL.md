@@ -78,6 +78,15 @@ step. A track's `length` can differ from 16 (a 12-step hat against a 16-step
 kick is a polymeter); `speed` 0.5 halves a track's tempo (half-time drums),
 2 doubles it.
 
+`set_step` also decides WHETHER a step plays: `prob` (0..1) makes it sit some
+passes out, differently each pass (hats at 0.7 stop sounding looped; a ghost
+snare at 0.4 comes and goes), and `cond` is a trig condition, counted in
+passes of the pattern: `"1:2"` plays every other pass, `"4:4"` only the
+fourth (a turnaround without a second pattern), `"first"` / `"!first"` the
+first pass or the rest, `"fill"` only while the player holds the studio's
+fill button and `"!fill"` only while they do not. A two-bar feel from a
+one-bar pattern is a `1:2` and a `2:2` on the two versions of the last beat.
+
 Notes: names or MIDI. Bass lives in C1..C3 (24..48), keys around C3..C5,
 leads C4 up. Given fewer notes than hits, the notes cycle over the hits in
 order, which is how a bassline is usually written: `notes: ["C2","C2","Eb2","G1"]`.
@@ -350,6 +359,15 @@ one.
   Put it on the drums or a bus, before the delay and reverb (it is).
 - Sidechain: `set_comp` on the bass with `source` the kick's index,
   threshold -30, ratio 6, release 0.15: the pumping.
+- A shared space is a SEND, not an output: add one `bus` track with its reverb
+  (or delay) fully wet, then `set_send` each track into it at its own amount
+  (snare 0.5, keys 0.35, vocal 0.6, kick and bass 0 or nearly). The dry
+  signal stays where it was, which `set_track`'s `out` does not do: `out`
+  moves the whole track into the bus, for a drum group or a filter over
+  several tracks.
+- `set_master` is the mix bus: `glue` 0.3..0.5 pulls a finished mix together,
+  `drive` 0.1..0.3 adds density, `low` / `high` a dB or two of tilt. Last,
+  lightly, and not instead of fixing a level: it is on everything at once.
 - Levels: kick 0.9, snare 0.8, hats 0.5..0.6, bass 0.8, everything else
   0.5..0.7. The master limiter catches peaks but a mix that lives in it is
   flat.
@@ -476,6 +494,12 @@ What each section is, carved from the full one:
 - **outro**: the intro in reverse, parts dropping out, cutoff closing. The
   chain loops back to slot 0 after it, so an outro that thins to the intro's
   parts loops cleanly.
+
+**A fill the player triggers**: steps with `cond: "fill"` (a snare roll, tom
+hits) beside the steps they replace marked `"!fill"`. They sound only while
+the fill button is held, so a section can hold its fill in reserve.
+`set_mute_scene` stores a drop for the same hands (scene 0 with everything
+but the kick and the pad muted).
 
 **A fill** is the last bar of a section doing something else: a one-bar slot
 after the section (`repeats` 1) holding a snare roll, a drum drop or a
