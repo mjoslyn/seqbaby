@@ -141,11 +141,14 @@ const pick = (list) => list[Math.floor(Math.random() * list.length)];
 /** Clear the pad and roll new assignments onto both axes. Tracks are dealt
  *  round-robin from a shuffle, so the picks spread across the session rather
  *  than piling onto whichever engine has the most controls (a hexop has 56).
+ *  With `add`, nothing is cleared: one more random parameter is pulled onto
+ *  each axis beside what is there (the pad's `random` button), so a pad that
+ *  is half right can be grown a pick at a time.
  *  Returns how many parameters landed. */
-export function diceMacroPad(pad) {
+export function diceMacroPad(pad, { add = false } = {}) {
   if (!pad) return 0;
   releasePad(pad);
-  for (const ax of ["x", "y"]) for (const a of [...pad[ax]]) unassign(pad, ax, a);
+  if (!add) for (const ax of ["x", "y"]) for (const a of [...pad[ax]]) unassign(pad, ax, a);
   const pools = state.tracks
     .filter(t => !t.muted)
     .map(t => ({ t, keys: diceCandidates(t) }))
@@ -157,7 +160,7 @@ export function diceMacroPad(pad) {
   if (!pools.length) return 0;
   let dealt = 0, turn = 0;
   for (const ax of ["x", "y"]) {
-    const want = 2 + Math.floor(Math.random() * 2);
+    const want = add ? 1 : 2 + Math.floor(Math.random() * 2);
     for (let n = 0, tries = 0; n < want && tries < want * pools.length * 2; tries++) {
       const p = pools[turn++ % pools.length];
       const free = p.keys.filter(k => !hasMacroOn(p.t, k));
@@ -452,6 +455,7 @@ export function openMacroPads() {
               ? "the pad keeps what you play: it becomes the sound"
               : "parameters spring back when you let go"}</span>
             <button type="button" class="sq-macro__dice sq-btn--ghost" title="dice: replace this pad's parameters with random ones from across the session">${ICON_DICE}<span>dice</span></button>
+            <button type="button" class="sq-macro__random sq-macro__dice sq-btn--ghost" title="random: pull one more random parameter onto each axis, keeping what is already on the pad. Press again for more">${ICON_DICE}<span>+ random</span></button>
             <button type="button" class="sq-macro__del sq-btn--ghost">delete pad</button>
           </div>
         </div>
@@ -470,7 +474,7 @@ export function openMacroPads() {
                   <label class="sq-macro__range">to <input type="number" class="sq-macro__hi" min="0" max="1" step="0.01" value="${a.hi}" /></label>
                   <label class="sq-macro__inv"><input type="checkbox" class="sq-macro__inv-cb"${a.invert ? " checked" : ""} /> flip</label>
                   <button type="button" class="sq-macro__rm sq-btn--ghost" title="remove">×</button>
-                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet. Press learn, then touch any knob, or roll the dice</div>`}
+                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet. Press learn, then touch any knob, or press + random</div>`}
             </div>`).join("")}
         </div>
       </div>
@@ -494,6 +498,10 @@ export function openMacroPads() {
     q(".sq-macro__dice").addEventListener("click", () => {
       _learn = null;
       draw(diceMacroPad(pad) ? "" : "nothing to roll: no unmuted track has a free knob");
+    });
+    q(".sq-macro__random").addEventListener("click", () => {
+      _learn = null;
+      draw(diceMacroPad(pad, { add: true }) ? "" : "nothing to add: no unmuted track has a free knob");
     });
     q(".sq-macro__latch-cb").addEventListener("change", (e) => { pad.latch = e.target.checked; draw(); });
     modal.querySelectorAll(".sq-macro__learn").forEach(b => b.addEventListener("click", () => {

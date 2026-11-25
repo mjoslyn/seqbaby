@@ -4115,6 +4115,9 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
   instrument/filter and half from the rack (thirteen wets would crowd it
   otherwise). Muted tracks, `vol`, knobs owned by an LFO or lane, and an fx
   stage's sub-controls while the stage is bypassed are skipped.
+- **`+ random`** beside it is the same deal without the clearing
+  (`diceMacroPad(pad, {add: true})`): one more random parameter onto each
+  axis, keeping what is there, so a pad can be grown a pick at a time.
 - **A pad holds an fx stage wired in** (`stageHeldByMacro`, signal.js), as an
   LFO does: a momentary pad writes the wet without the control's handler, so a
   bypassed stage would otherwise move its knob and nothing you can hear.
