@@ -54,3 +54,14 @@ test("the server reads a recording as the engine does", () => {
   assert.deepEqual(server.recordingSummary(rec()), summarizeRecording(rec()));
   assert.equal(server.clockLabel(3725), clockLabel(3725));
 });
+
+test("the fill button is a sampled field: its press and its release are each one diff", () => {
+  const off = { scene: 0, fill: false, tracks: {}, mix: null };
+  const on = { ...off, fill: true };
+  assert.equal(diffPerf(off, off), null);
+  assert.deepEqual(diffPerf(off, on), { fill: true });
+  assert.deepEqual(diffPerf(on, off), { fill: false });
+  assert.equal(applyPerf(off, { fill: true }).fill, true);
+  // a set recorded before the fill was sampled: nothing to write back
+  assert.equal("fill" in applyPerf({ scene: 0, tracks: {}, mix: null }, { scene: 1 }), false);
+});

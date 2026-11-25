@@ -4001,8 +4001,12 @@ on every device; on a phone it is a line of its own under the icon row.
 - **Fill is `state.fill`**, which only trig conditions read. Hold the button
   for as long as the fill lasts; a press shorter than 260ms latches it until
   the next tap. Pointer-captured, so a finger sliding off does not end it.
-  Performance state: not saved, not in undo, not shared in a jam, and not in
-  a recorded set.
+  Performance state: not saved, not in undo, not shared in a jam. A
+  recorded live set does carry it: `capturePerf` (setRecorder.js) samples
+  `fill` with the rest of the performance state at the top of every step,
+  which is when the transport reads it, and replay writes it back through
+  `setFill`, so the button lights as the fill plays. A set recorded before
+  this has no `fill` key and leaves the button alone.
 - **A mute scene is a stored set of muted tracks** (`state.muteScenes`, four
   slots of track ids or null). A tap on an empty slot stores the mutes as
   they stand; a tap on a stored one applies it at once (`applyMutes`, which
@@ -6069,7 +6073,7 @@ events are.
 - **The clock is the step.** The transport calls one hook at the top of every
   step (`setStepHook`, transport.js). Recording samples the performance state
   there and diffs it (`perf`: clip slots, stopped / frozen / queued, mute,
-  solo, scene, queue, mode, view, the mix runtime and every deck,
+  solo, scene, queue, mode, view, the fill button, the mix runtime and every deck,
   `captureMixRuntime`); replaying writes those diffs back at the same step.
   Sampling instead of logging means every way of launching a clip or moving
   the crossfader is caught without instrumenting it.
@@ -6451,7 +6455,7 @@ through a 6ms fade on its gain).
 - Undo is in memory and per page: a reload starts a fresh stack, and it is
   capped at 100 states.
 - A send amount and the master chain take no LFO, lane or macro pad.
-- The fill button is not recorded in a live set, and has no key.
+- The fill button has no key.
 - Bounce is real-time capture (offline rendering would need rebuilding voices
   under an OfflineAudioContext, which the Plaits WASM voice doesn't support).
 - Keyboard performance mode is desktop-only.

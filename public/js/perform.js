@@ -7,7 +7,8 @@
  * carries a trig condition (trigCond.js): while it is true the steps marked
  * "fill only" play and the ones marked "not in a fill" rest. Hold the button
  * for as long as the fill should last; a quick tap latches it until the next
- * tap. Performance state: not saved, not undone, not shared in a jam.
+ * tap. Performance state: not saved, not undone, not shared in a jam. A
+ * recorded live set does carry it (setRecorder.js samples it every step).
  *
  * **Mute scenes** are four stored sets of muted tracks. A tap on an empty
  * slot stores the mutes as they stand; a tap on a stored one puts them in
@@ -35,6 +36,7 @@ export function setFill(on) {
   if (btn) {
     btn.classList.toggle("is-on", state.fill);
     btn.setAttribute("aria-pressed", String(state.fill));
+    if (!state.fill) btn.classList.remove("is-latched");
   }
 }
 

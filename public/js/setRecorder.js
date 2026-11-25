@@ -48,6 +48,7 @@ import { paintTrackSlotBadge, state, trackSlot } from "./state.js";
 import { announceClips, launchClip } from "./clips.js";
 import { setStepHook, startPlayback, stopPlayback } from "./transport.js";
 import { setView } from "./views.js";
+import { setFill } from "./perform.js";
 import { renderPatternGrid } from "./patternBar.js";
 
 // ---- a track, named the same on both sides ----------------------------------
@@ -95,6 +96,7 @@ function capturePerf() {
     qop: !!state._queueOnPattern,
     mode: state.patternMode,
     view: state.view,
+    fill: !!state.fill,          // the fill button (perform.js), held or latched
     tracks, mix, decks,
   };
 }
@@ -154,6 +156,8 @@ function restorePerf(p, at) {
   if ("scene" in p && p.scene != null && p.scene !== state.activePattern) { state.activePattern = p.scene; repaint = true; }
   if ("queued" in p) { state.queuedPattern = p.queued; repaint = true; }
   if ("qop" in p) state._queueOnPattern = p.qop;
+  // A set recorded before the fill was sampled has no `fill`, and leaves it alone.
+  if ("fill" in p && !!p.fill !== !!state.fill) setFill(!!p.fill);
   if ("mode" in p && p.mode && p.mode !== state.patternMode) { try { setPatternMode(p.mode); } catch { state.patternMode = p.mode; } }
   if ("view" in p && p.view && p.view !== state.view && replay?.followView !== false) {
     // a view switch while playing would also switch the pattern mode at the
