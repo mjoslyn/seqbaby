@@ -105,7 +105,8 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 share put/get for the legacy static server (in memory)
 ├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares;
-│                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets)
+│                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets;
+│                              0004_compose_critic.sql: the critic's columns on compose_turns)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -115,6 +116,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── audition.mjs           plays a song in a headless browser and reads the meters
 │   ├── polish.mjs             a compose turn's mix and feel pass, in code (levels by role, dynamics, nudges)
 │   ├── hearing.mjs            the studio's meter report, checked and read as notes for the model
+│   ├── critic.mjs             a compose turn's critic: a second model call reading the finished song against the request
 │   └── README.md              connecting a client, the tool list, env
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
@@ -5580,12 +5582,13 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
 ### What a turn gets besides the model: checks, polish, a listen, a record
 
 The model writes blind and from a description, so four things around it are
-code. In the order a turn meets them (`runComposeTurn`, when the model stops
+code and one is a second model call. In the order a turn meets them (`runComposeTurn`, when the model stops
 calling tools):
 
 ```
-model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ listen ─▶ (one fix-up) ─▶ polish ─▶ done
-               (nudge, ≤3)    (once, advisory)    (code)    (browser)                           └▶ compose_turns
+model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ critic ─▶ listen ─▶ (one fix-up) ─▶ polish ─▶ done
+               (nudge, ≤3)    (once, advisory)    (code)    (a model,  (browser)                          └▶ compose_turns
+                                                            once, one fix-up)
 ```
 
 - **The production check is `productionNotes`** (songBuilder.js, also
@@ -5611,6 +5614,28 @@ model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ list
   and each rule switches itself off once applied, so the second pass at the
   end of the turn only touches what was written after the listen. The system
   prompt tells the model it happens.
+- **The critic turn** (`mcp/critic.mjs`). Code can say a velocity is flat;
+  it cannot say the bass is in another key than the chords, that nothing is
+  a hook, or that the breakdown asked for is missing, and the model that
+  wrote the song has just said it is done. So once a turn, after the polish
+  and BEFORE the listen (what the critic sends back gets rewritten, and the
+  one listen should be of the song that lands), `critique` makes one more
+  request on the turn's own model: no tools, its own short system prompt
+  (`CRITIC_SYSTEM`), none of the turn's conversation, only the request and
+  the song (`songForCritic`: the builder's summary with each track's role,
+  without the per-step detail). It replies `VERDICT: pass` or `VERDICT:
+  revise` and at most four `- ` notes (`parseCritique`; anything else is no
+  review), which go back as one user message (`criticNudge`), advice the
+  composer acts on where it agrees. Only a turn that wrote at least
+  `CRITIC_MIN_PARTS` (3) parts, a track's pattern, is reviewed
+  (`criticWanted`), so a knob edit costs nothing more. It never throws: a
+  failed or refused review is logged and the turn goes on. Its tokens are in
+  the turn's `usage`; `stats.critic` / `criticNotes` are the record's
+  `critic` / `critic_notes` (counts, never the notes). Off with
+  `COMPOSE_CRITIC=off`, per call with `critic: false`
+  (`compose:eval --no-critic` compares a set with and without);
+  `COMPOSE_CRITIC_EFFORT` is its effort (medium). The work log shows it as
+  a step. `test/composeCritic.test.js`.
 - **The listen.** The panel sends `canHear` (`app/composeHear.ts`: not on a
   phone, not on Save-Data) and the job hands the turn a `listen`. When the
   turn says it is done, the job (`ComposeJob.listen`) puts the song at
@@ -5634,7 +5659,8 @@ model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ list
   a row when a turn ends: model, the genre picker's id and seed when it built
   the prompt (`meta`, cut down by `turnMeta`), time, rounds, tool calls and
   errors, nudges, production notes at first stop and at the end, whether it
-  was heard and how many things that found, what the polish did. The panel
+  was heard and how many things that found, whether the critic reviewed it and
+  with how many notes, what the polish did. The panel
   answers it through `/api/compose/outcome` when the review bar is
   (`reportOutcome`: kept, discarded, superseded by the next ask, dropped when
   another song arrived; a decision replaces the absence of one, then stands).

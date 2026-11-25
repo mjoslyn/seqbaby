@@ -3,7 +3,7 @@
 // genre plan, the checks or the model can be compared with what came before.
 //
 //   ANTHROPIC_API_KEY=... node scripts/compose-eval.mjs [--out eval.json]
-//        [--only acid] [--model <id>] [--audition [url]]
+//        [--only acid] [--model <id>] [--audition [url]] [--no-critic]
 //
 // Each case is a whole turn through mcp/composeTurn.mjs, the loop the studio's
 // panel runs, from an empty song. Genre cases use the picker's own prompt with
@@ -13,6 +13,9 @@
 // the turn took, and, with --audition, the meters (mcp/audition.mjs, which
 // needs playwright and a running studio; the panel's own listen needs a
 // browser, so it is not part of a turn here).
+//
+// --no-critic runs the turns without the critic turn (mcp/critic.mjs), to
+// compare a set with and without it.
 //
 // It spends real tokens: about a song's worth per case.
 
@@ -64,6 +67,7 @@ for (const c of picked) {
       message: c.message,
       session: JSON.parse(JSON.stringify(sb.newSong())),
       unnamed: true,
+      ...(flag("no-critic") ? { critic: false } : {}),
     });
     const song = sb.fromBlob(out.session);
     const notes = sb.productionNotes(song);
@@ -90,6 +94,7 @@ const mean = (k) => (ok.length ? Math.round((ok.reduce((a, r) => a + (Number(r[k
 const summary = {
   cases: results.length, failed: results.length - ok.length,
   seconds: mean("seconds"), rounds: mean("rounds"), toolErrors: mean("toolErrors"), nudges: mean("nudges"),
+  reviewed: ok.filter((r) => r.critic != null).length, criticNotes: mean("criticNotes"),
   notesFirst: mean("lintFirst"), notesLeft: ok.length ? Math.round((ok.reduce((a, r) => a + r.production.length, 0) / ok.length) * 100) / 100 : null,
   tracks: mean("tracks"), sections: mean("sections"),
   ...(audition ? { withSilentTracks: ok.filter((r) => r.silent?.length).length } : {}),

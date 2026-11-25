@@ -18,6 +18,7 @@ import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "./tools.mjs";
 import { DEFAULT_COMPOSE_MODEL } from "../lib/composeModels.js";
 import { polishSong, wantsMechanical } from "./polish.mjs";
 import { hearingNudge, sanitizeReport } from "./hearing.mjs";
+import { criticNudge, criticWanted, critique } from "./critic.mjs";
 
 // What a turn runs on when its caller doesn't say, which is every compose
 // chat turn: the deploy's ANTHROPIC_MODEL, else the shared default.
@@ -34,6 +35,8 @@ const MAX_TOOL_ROUNDS = Number(process.env.COMPOSE_MAX_ROUNDS || 60);
 const MAX_HISTORY_TURNS = 16;
 // How many times a turn that stopped short is sent back to finish.
 const MAX_NUDGES = 3;
+// The critic turn (mcp/critic.mjs) is on unless the deploy says otherwise.
+const CRITIC_ON = !/^(off|0|false|no)$/i.test(process.env.COMPOSE_CRITIC || "");
 
 // A request that asks for music to be made or changed, as opposed to a
 // question about the song. Only these are sent back for changing nothing.
@@ -125,7 +128,7 @@ The tools operate on the song currently open in the studio (already loaded for y
 
 Call many tools in ONE reply, not one at a time: they run in the order you write them, and every reply re-reads this whole conversation, so a reply per call is the slow and costly way to work. A whole track is one reply (add_track, apply_preset, set_steps, set_params, set_fx: a new track's index is the number of tracks before it, so you can address it in the same reply), and so is a whole section, or every lookup you need (several describe_engine calls together). Look an engine up only when you need a control the guide does not already name. Asked for a whole song, work in the order the guide gives: plan its sections first (the guide's Song structure), write the fullest section track by track, then copy_section it into the other slots and carve each one, and chain them. Asked for a beat or a loop, one pattern is the answer.
 
-Two things happen after you stop, so you need not do them by hand. A polish pass in code fills in what you left unset on what you wrote this turn: a level by role on a track you added and never set vol on, dynamics on a part you wrote at a single velocity, and offbeat hats a touch late. Set those yourself wherever you want something specific and it leaves them alone. And where the studio can, it plays the song back and reads the meters; if a part is silent or far out of balance you are told once, with the readings, and asked to fix it.
+Three things happen after you stop, so you need not do them by hand. A polish pass in code fills in what you left unset on what you wrote this turn: a level by role on a track you added and never set vol on, dynamics on a part you wrote at a single velocity, and offbeat hats a touch late. Set those yourself wherever you want something specific and it leaves them alone. When you have written a good deal of music, a second listener reads the finished song against the request and may send back a few notes, once: a producer's opinion on the music itself (harmony, the hook, the arrangement), to act on where you agree. And where the studio can, it plays the song back and reads the meters; if a part is silent or far out of balance you are told once, with the readings, and asked to fix it.
 
 When you're done, stop calling tools and reply in plain, friendly, non-technical language: a sentence or two on what you made or changed, not a list of tool calls. If a tool call fails, read the error, fix the call and try again rather than giving up silently.`;
   }
@@ -257,6 +260,10 @@ export async function runComposeTurn({
   // resolves the browser's meter report (mcp/hearing.mjs) or null when nobody
   // could listen. Called at most once a turn. Absent, the turn is not heard.
   listen = /** @type {null | ((session: unknown) => Promise<unknown>)} */ (null),
+  // The critic turn: once the song is said to be finished, a second model
+  // call reads it against the request and its notes are sent back, once
+  // (mcp/critic.mjs). Only for a turn that wrote a substantial amount.
+  critic = CRITIC_ON,
   onEvent = async (_event) => {},
 }) {
   const ctx = newCtx(session);
@@ -298,6 +305,10 @@ export async function runComposeTurn({
   let heard = null;
   let hearNotes = 0;
   let listened = false;
+  // The review: null when the turn was not reviewed, else whether it came
+  // back readable, and how many notes it had.
+  let reviewed = null;
+  let criticNotes = 0;
   // What the turn cost, summed over its rounds.
   const usage = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   const polished = [];
@@ -365,6 +376,26 @@ export async function runComposeTurn({
       // It says it is done. The polish pass first, so what is heard is what
       // will land; then one listen, and one more go if something is wrong.
       if (changedNow) await polish();
+      // Then the critic, before the listen: what it sends back gets rewritten,
+      // and the one listen should be of the song that lands.
+      if (changedNow && critic && reviewed == null && canGoOn && criticWanted(before, ctx.song)) {
+        await onEvent({ type: "tool", name: "critic", ok: true, summary: "a second listener is reading it" });
+        const review = await critique({ anthropic, model, song: ctx.song, message, before });
+        reviewed = !!review;
+        if (review?.usage) {
+          const cu = review.usage;
+          usage.in += cu.input_tokens || 0; usage.out += cu.output_tokens || 0;
+          usage.cacheRead += cu.cache_read_input_tokens || 0; usage.cacheWrite += cu.cache_creation_input_tokens || 0;
+        }
+        const back = review ? criticNudge(review.notes) : null;
+        if (back) {
+          criticNotes = review.notes.length;
+          await onEvent({ type: "tool", name: "critic", ok: false, summary: `critic: ${criticNotes} note${criticNotes === 1 ? "" : "s"} to consider` });
+          messages.push({ role: "user", content: back });
+          continue;
+        }
+        await onEvent({ type: "tool", name: "critic", ok: true, summary: review ? "critic: nothing to change" : "the critic couldn't read it this time" });
+      }
       if (changedNow && listen && !listened && canGoOn) {
         listened = true;
         await onEvent({ type: "tool", name: "listen", ok: true, summary: "listening back" });
@@ -426,7 +457,7 @@ export async function runComposeTurn({
     stats: {
       rounds, toolCalls, toolErrors, nudges,
       lintFirst, lintLast: after !== before ? sb.productionNotes(ctx.song).length : null,
-      heard, hearNotes, polished: polished.length,
+      heard, hearNotes, critic: reviewed, criticNotes: reviewed == null ? null : criticNotes, polished: polished.length,
       tracks: ctx.song.tracks?.length ?? 0, sections: sb.songSections(ctx.song).length,
     },
     usage,

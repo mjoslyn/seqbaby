@@ -278,7 +278,7 @@ test("deleting a user takes everything of theirs with it", async () => {
 
 test("a compose turn's outcome is set by its starter only, and holds no words", async () => {
   const { env, alice, bob } = await world();
-  const stats = { rounds: 12, toolCalls: 30, toolErrors: 1, nudges: 1, lintFirst: 4, lintLast: 1, heard: true, hearNotes: 2, polished: 3, tracks: 6, sections: 4 };
+  const stats = { rounds: 12, toolCalls: 30, toolErrors: 1, nudges: 1, lintFirst: 4, lintLast: 1, heard: true, hearNotes: 2, critic: true, criticNotes: 3, polished: 3, tracks: 6, sections: 4 };
   await turns.recordTurn(env.DB, { id: "job-alice-0001", userId: alice, viewToken: "tok-a", status: "done", changed: true, model: "m1", ms: 90000, messageLen: 40, meta: { kind: "genre", genre: "acid-house", seed: 7 }, stats });
   await turns.recordTurn(env.DB, { id: "job-guest-0001", userId: null, viewToken: "tok-g", status: "done", changed: true, model: "m1", ms: 50000, messageLen: 12, meta: { genre: "DROP TABLE", seed: 1 }, stats });
   // a second record of the same job changes nothing
@@ -288,6 +288,8 @@ test("a compose turn's outcome is set by its starter only, and holds no words", 
   assert.equal(row("job-alice-0001").user_id, alice);
   assert.equal(row("job-alice-0001").genre, "acid-house");
   assert.equal(row("job-alice-0001").heard, 1);
+  assert.equal(row("job-alice-0001").critic, 1);
+  assert.equal(row("job-alice-0001").critic_notes, 3);
   // a genre that is not an id is not kept, and neither is the token itself
   assert.equal(row("job-guest-0001").genre, null);
   assert.equal(row("job-guest-0001").kind, "ask");
