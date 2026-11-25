@@ -1,5 +1,5 @@
 import { restoreLaneBases, runAutomationForStep } from "./automation.js";
-import { fireMetronome, paintBeatIndicator } from "./beat.js";
+import { fireMetronome, paintBeatIndicator, repeatReadout } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote } from "./euclid.js";
@@ -421,6 +421,7 @@ export async function stopPlayback() {
   state._arrJump = null;                              // a clip waiting for a bar that will not come
   setArrangeRecord(false);                         // recording stops with the transport, and the take lands
   paintNowIndicator();
+  paintBeatIndicator(1);                           // back to 1.1, the repeat count cleared
   setStatus("stopped");
 }
 
@@ -748,9 +749,12 @@ export async function startPlayback(opts = {}) {
     // it marks quarters, which land on even 16ths and never swing.
     // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
+    // ...and which repeat this step's bar is, before the bar line below moves
+    // the count on (beat.js: the dial shows it under the beat).
+    const repSnap = repeatReadout(stepsPerBarForMeter(transportMeter()));
     // `_nowTick` is the tick being HEARD, for anything that draws a position
     // against the song (the arrangement view's playhead) rather than a step.
-    scheduleAtAudible(() => { state._nowTick = globalTickSnap; paintBeatIndicator(globalTickSnap); }, time, lat);
+    scheduleAtAudible(() => { if (!state.playing) return; state._nowTick = globalTickSnap; paintBeatIndicator(globalTickSnap, repSnap); }, time, lat);
     // The bar line comes from the scene's meter: its length in sixteenths (16
     // in 4/4, 28 in 7/4, 14 in 7/8), or the ruler's (slot 0) in arrange mode.
     // The metronome clicks on its beats and accents its downbeat.

@@ -1,5 +1,5 @@
 import { stepsPerBeatForMeter, transportMeter } from "./meter.js";
-import { state } from "./state.js";
+import { loopRange, state } from "./state.js";
 
 export let _metroOsc = null;
 export let _metroGain = null;
@@ -74,12 +74,49 @@ export function buildBeatIndicator() {
   label.classList.add("sq-beat__label");
   label.textContent = "1.1";
   svg.appendChild(label);
+  // Under it, which repeat the pattern is on (repeatReadout). The beat sits
+  // a little higher while there is one to show (style.css, `has-rep`).
+  const rep = document.createElementNS(ns, "text");
+  rep.setAttribute("x", "0");
+  rep.setAttribute("y", "7");
+  rep.setAttribute("text-anchor", "middle");
+  rep.setAttribute("dominant-baseline", "central");
+  rep.classList.add("sq-beat__rep");
+  svg.appendChild(rep);
   svg.dataset.sig = sig;
   svg.dataset.steps = String(steps);
   svg.dataset.spb = String(spb);
 }
 
-export function paintBeatIndicator(tick) {
+/**
+ * Which repeat the pattern is on, for the dial: read when a step is
+ * SCHEDULED (the transport snapshots it with the tick), so the count turns
+ * over with the bar being heard, not a lookahead before it.
+ *
+ *   chain mode, or a loop of patterns   `2/4`  the bar of the pattern's repeat count
+ *   repeat mode                         `×3`   how many times the bar has come round
+ *   arrange mode                        `12`   the ruler's bar
+ *
+ * Empty while stopped.
+ * @param {number} barLen the bar's length in sixteenths
+ */
+export function repeatReadout(barLen) {
+  if (!state.playing) return "";
+  if (state.patternMode === "arrange") return String((state.arrBar ?? 0) + 1);
+  if (state.patternMode === "chain" || loopRange()) {
+    const need = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
+    return `${Math.min(need, (state.chainBarCount ?? 0) + 1)}/${need}`;
+  }
+  const bars = Math.floor(Math.max(0, state.tick - (state._countOrigin ?? 0)) / Math.max(1, barLen));
+  return `×${bars + 1}`;
+}
+
+/**
+ * @param {number} tick
+ * @param {string} [rep] the repeat readout for that tick (the transport's
+ *   snapshot); left out, the dial clears it when stopped and keeps it otherwise
+ */
+export function paintBeatIndicator(tick, rep) {
   const svg = document.getElementById("beat-indicator");
   if (!svg) return;
   const wantSig = `${currentIndicatorSteps()}@${currentIndicatorMeter().num}/${currentIndicatorMeter().den}`;
@@ -95,5 +132,11 @@ export function paintBeatIndicator(tick) {
   }
   const lbl = svg.querySelector(".sq-beat__label");
   if (lbl) lbl.textContent = `${beat}.${sub}`;
+  const repEl = svg.querySelector(".sq-beat__rep");
+  if (repEl) {
+    const text = !state.playing ? "" : rep ?? repEl.textContent;
+    if (repEl.textContent !== text) repEl.textContent = text;
+    svg.classList.toggle("has-rep", !!text);
+  }
 }
 

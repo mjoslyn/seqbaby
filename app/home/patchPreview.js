@@ -176,8 +176,10 @@ export function patchSession(config, name = "patch") {
   const engineKey = patchEngineKey(c);
   let track;
   if (c._kind === "track-patch") {
-    const { _kind, ...sound } = c;
-    void _kind;
+    // only the sound: what a patch may also hold (its lanes, a pattern:
+    // session.js) is not the card's to play
+    const { _kind, has, automation, pattern, ...sound } = c;
+    void _kind; void has; void automation; void pattern;
     track = { ...sound };
   } else {
     track = { customConfig: c };

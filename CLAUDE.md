@@ -2636,7 +2636,14 @@ Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track
    retriggers 1–8× when no chord. Sampler opts carry region/fade/loop/
    pitchBase/pitchLock/sampleSpeedMode.
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
-   beat indicator). Metronome fires on quarters when enabled.
+   beat indicator). Metronome fires on quarters when enabled. **The beat dial
+   shows the repeat count under the beat** (`repeatReadout`, beat.js): `2/4`
+   in chain mode or a loop of patterns (the bar of the pattern's repeat
+   count), `×3` in repeat mode (how many times the bar has come round since
+   the pattern started, from `_countOrigin`), the ruler's bar in arrange mode,
+   nothing while stopped. The transport snapshots it with the tick when the
+   step is SCHEDULED, before the bar line moves the count, and paints both at
+   the audible time, so the number turns over with the bar being heard.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
    chain-mode advance honoring `patternRepeats` / `patternMeters` (to
    `nextChainPattern`: the next non-empty pattern, or the next slot of the
@@ -4614,6 +4621,28 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
   as it always was: the patch of that name is replaced. The few fields a card
   or the bay index needs (`engine_key`, `kind`, `drum`, `sample`) are columns
   written beside `config`, so a list never pulls a config.
+- **What a patch holds is the saver's choice** (`showPatchSaveDialog`,
+  dialogs.js: the name and two boxes; `serializeTrackPatch(t, {sound,
+  pattern})` and `patchHas`, session.js). `sound`, ticked to start, is the
+  patch as it always was (engine, knobs, filter, eq, comp, fx chain, mods,
+  the sample) plus the automation lanes of the pattern the track is on
+  (`automation`): a lane is part of how a sound moves. `pattern` alone is
+  that pattern's notes (`pattern`: every per-step array, probability and
+  condition included, no lanes, no p-lock) and no sound. Both is the sound
+  and that one pattern with its lanes, never the track's other patterns.
+  Neither is refused (the save button greys). The dialog says in a line what
+  the ticked boxes will do on load.
+- **Loading follows what is in it** (`applyTrackPatch`). A sound replaces the
+  track's sound, and its lanes replace the current pattern's, tiled to that
+  pattern's length and kept only where the engine can play them
+  (`applyPatchLanes`); the notes are left alone. A pattern goes through
+  `writePatternOnto` (the track head's paste), so the track keeps its sound
+  and its p-lock. Both does one then the other. A patch saved before the
+  boxes has no `has` and no `automation`: it is a sound, and leaves the
+  lanes alone. A patch card's preview plays the sound only
+  (`patchSession` drops `has` / `automation` / `pattern`); a pattern-only
+  patch still writes `engineKey`, so the bay's list and a card know what the
+  part was written for.
 - The list is re-read when the tab comes back into view (`setPatchList`), so
   a patch saved from a card elsewhere shows up.
 - **Off localStorage**: `migrateLocalPatches()` (bay.ts), run by the studio

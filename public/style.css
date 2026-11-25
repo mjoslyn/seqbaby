@@ -446,6 +446,16 @@ button.sq-btn--danger { color: var(--danger); }
   letter-spacing: 0.02em;
 }
 
+/* The repeat count under the beat (beat.js, repeatReadout): 2/4 in a chain,
+   ×3 on a loop. The beat moves up a little to make room for it. */
+.sq-beat-indicator .sq-beat__rep {
+  font-family: ui-monospace, monospace;
+  font-size: 7.5px;
+  font-weight: 600;
+  fill: var(--accent-2);
+}
+.sq-beat-indicator.has-rep .sq-beat__label { transform: translateY(-4px); font-size: 10px; }
+
 #metronome[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
 #metronome[aria-pressed="true"] .sq-btn-icon { color: #0b0d10; }
 /* The metronome button doubles as the click's volume, the way the dice does
@@ -2289,6 +2299,11 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   width: 100%;
   font: inherit;
 }
+/* The patch save dialog's two boxes (dialogs.js, showPatchSaveDialog). */
+.sq-patchsave__what { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 8px; }
+.sq-patchsave__what label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.sq-patchsave__what label span { color: var(--fg-dim); font-size: 12px; }
+.sq-patchsave__says { margin-bottom: 12px; min-height: 3em; }
 .sq-modal__input--multiline {
   min-height: 110px;
   resize: vertical;

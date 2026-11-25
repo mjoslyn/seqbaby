@@ -36,6 +36,63 @@ export function showInputDialog({ title, defaultValue = "", placeholder = "", mu
 }
 
 /**
+ * Modal: name a patch and say what goes in it. Two boxes: the sound (with its
+ * fx, mods and the pattern's automation lanes), ticked to start, and the
+ * pattern's notes. Both ticked saves the two together, of the current pattern.
+ * Resolves `{name, sound, pattern}`, or null on cancel.
+ * @param {{defaultValue?: string}} [opts]
+ */
+export function showPatchSaveDialog({ defaultValue = "" } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    overlay.innerHTML = `
+      <div class="sq-modal sq-patchsave" role="dialog" aria-modal="true" aria-label="save patch">
+        <div class="sq-modal__title">save patch as</div>
+        <input class="sq-modal__input" type="text" value="${esc(defaultValue)}" placeholder="my-patch-name" />
+        <div class="sq-patchsave__what">
+          <label title="the instrument and everything shaping it: its knobs, filter, eq, compressor, fx chain, mods, and this pattern's automation lanes"><input type="checkbox" class="sq-patchsave__sound" checked /> sound <span>with fx, mods and automation</span></label>
+          <label title="the notes of the pattern this track is on"><input type="checkbox" class="sq-patchsave__pattern" /> pattern <span>the notes</span></label>
+        </div>
+        <div class="sq-modal__body sq-patchsave__says"></div>
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          <button class="sq-modal__ok">save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector(".sq-modal__input");
+    const sound = overlay.querySelector(".sq-patchsave__sound");
+    const pattern = overlay.querySelector(".sq-patchsave__pattern");
+    const says = overlay.querySelector(".sq-patchsave__says");
+    const ok = overlay.querySelector(".sq-modal__ok");
+    const paint = () => {
+      ok.disabled = !sound.checked && !pattern.checked;
+      says.textContent = sound.checked && pattern.checked
+        ? "saves the sound and this pattern's notes together. Loading it onto a track changes its sound and writes the notes over the pattern it is on."
+        : sound.checked ? "saves the sound. Loading it onto a track changes how the track sounds and leaves its notes alone."
+        : pattern.checked ? "saves this pattern's notes. Loading it onto a track writes them over the pattern it is on and keeps that track's sound."
+        : "tick at least one.";
+    };
+    sound.addEventListener("change", paint);
+    pattern.addEventListener("change", paint);
+    paint();
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+    const close = (val) => { overlay.remove(); resolve(val); };
+    const submit = () => { if (!ok.disabled) close({ name: input.value, sound: sound.checked, pattern: pattern.checked }); };
+    ok.addEventListener("click", submit);
+    overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target === input) { e.preventDefault(); submit(); }
+      if (e.key === "Escape") close(null);
+    });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
+  });
+}
+
+/**
  * Modal: ask before something destructive. Resolves true / false.
  *
  * The one thing here the other dialogs don't do is default to CANCEL — Escape,

@@ -1,8 +1,8 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
-import { applyTrackPatch, serializeTrackPatch } from "./session.js";
+import { applyTrackPatch, patchHas, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, autoLabel, baseModKey, fxInstanceAutoKeys, fxStageLevel, fxStageOf, fxStageOfModKey, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
-import { showConfirmDialog, showInputDialog, showSavedPatchPicker } from "./dialogs.js";
+import { showConfirmDialog, showInputDialog, showPatchSaveDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { PHONE_MQ, isMobileDevice, isPhoneLayout, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
@@ -1331,16 +1331,16 @@ export function renderTrack(t) {
     // signed out: say so before asking for a name nobody can keep.
     if (!canSavePatches()) { setStatus("sign in to save patches: they live in your account"); return; }
     const suggested = t.soundPromptText ? t.soundPromptText.split(/[.,;]/)[0].slice(0, 40) : t.name;
-    const name = await showInputDialog({
-      title: "save patch as",
-      defaultValue: suggested,
-      placeholder: "my-patch-name",
-    });
+    // What goes in it is the saver's: the sound (ticked to start), the
+    // current pattern's notes, or both together (session.js).
+    const ask = await showPatchSaveDialog({ defaultValue: suggested });
+    const name = ask?.name;
     if (!name || !name.trim()) return;
+    const what = ask.sound && ask.pattern ? "sound and pattern" : ask.pattern ? "pattern" : "sound";
     try {
-      setStatus(`saving patch "${name.trim()}"…`);
-      await savePatch(name.trim(), serializeTrackPatch(t));
-      setStatus(`saved patch "${name.trim()}" to your patches`);
+      setStatus(`saving ${what} "${name.trim()}"…`);
+      await savePatch(name.trim(), serializeTrackPatch(t, { sound: ask.sound, pattern: ask.pattern }));
+      setStatus(`saved the ${what} as "${name.trim()}" in your patches`);
     } catch (e) {
       setStatus(`could not save patch: ${e?.message || e}`, true);
     }
@@ -1358,6 +1358,11 @@ export function renderTrack(t) {
       if (!patch) return;
       if (patch._kind === "track-patch") {
         applyTrackPatch(t, patch);
+        const has = patchHas(patch);
+        setStatus(has.sound && has.pattern ? `loaded "${name}": its sound, and its notes onto this pattern`
+          : has.pattern ? `loaded the pattern "${name}" onto this track's pattern`
+          : `loaded patch "${name}"`);
+        return;
       } else {
         // legacy custom-Tone patch: load it as a saved engine
         setEngineKey(t, `saved:${name}`);

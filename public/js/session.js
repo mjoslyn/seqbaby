@@ -1,4 +1,4 @@
-import { AUTOMATION_TARGETS, laneBases } from "./automation.js";
+import { AUTOMATION_TARGETS, canAutomate, laneBases } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT, baseModKey, fxInstanceIds } from "./constants.js";
@@ -16,13 +16,15 @@ import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } f
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI, resolveSoundSources } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
+import { refreshAutIfOpen } from "./pianoRoll.js";
+import { refreshParamIndicators } from "./paramTargets.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback, dropFeedbackSends, resolveSends, serializeSends } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, inSong, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, inSong, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
-import { createTrack, removeTrack } from "./track.js";
+import { createTrack, removeTrack, writePatternOnto } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
 import { buildVoiceForEngine, migrateGranularParams, stampGranularParams } from "./voices.js";
 import { haloTone } from "./engineData.js";
@@ -974,8 +976,67 @@ export async function onNewSet() {
 // (name, mute/solo/lock, length). Serialize captures it; apply installs it onto
 // any existing track, reusing the same voice/UI rebuild path as session load.
 
-/** @param {Track} t */
-export function serializeTrackPatch(t) {
+// What a patch holds is the saver's choice (`has`, the save dialog's two
+// boxes), and there are three kinds:
+//
+//   sound            the sound above, plus the automation lanes of the pattern
+//                    the track is on (`automation`): a lane is part of how a
+//                    sound moves, as its LFOs are. The default.
+//   pattern          the notes of the pattern the track is on (`pattern`: every
+//                    per-step array, no lanes, no p-lock) and no sound at all.
+//                    Loaded onto a track, it keeps that track's sound.
+//   sound + pattern  both, of the pattern the track is on: its sound and its
+//                    notes with their lanes. Loaded onto a track, that
+//                    track's sound and current pattern become these. The
+//                    track's other patterns are not in it.
+//
+// A patch saved before the boxes existed has no `has` and is a sound.
+// What is never in one: where the track goes (out, sends, sidechain source,
+// mute / solo, its arrangement blocks), which belong to a song.
+
+/** What a patch carries. @param {any} patch @returns {{sound: boolean, pattern: boolean}} */
+export function patchHas(patch) {
+  const h = patch?.has;
+  if (!h || typeof h !== "object") return { sound: true, pattern: false };
+  const sound = h.sound !== false, pattern = !!h.pattern;
+  return sound || pattern ? { sound, pattern } : { sound: true, pattern: false };
+}
+
+const laneCopy = (automation) => Object.fromEntries(
+  Object.entries(automation || {})
+    .filter(([k, lane]) => lane && AUTOMATION_TARGETS[baseModKey(k)])
+    .map(([k, lane]) => [k, { enabled: !!lane.enabled, values: (lane.values || []).slice() }]));
+
+/**
+ * @param {Track} t
+ * @param {{sound?: boolean, pattern?: boolean}} [what] the save dialog's boxes
+ */
+export function serializeTrackPatch(t, what = {}) {
+  const has = patchHas({ has: { sound: what.sound !== false, pattern: !!what.pattern } });
+  const engineKey = t.engineKey.startsWith("saved:") ? "custom" : t.engineKey;
+  const slot = trackSlot(t);
+  if (!has.sound) {
+    // The notes alone. The engine and the kit flag ride along only to say
+    // what the part was written for (the bay's list, a card's picture).
+    const p = serializeTrack(t).patterns[slot];
+    return {
+      _kind: "track-patch", engineKey, isDrumKit: !!t.isDrumKit, has,
+      pattern: { ...p, automation: {}, soundLocked: false, sound: null },
+    };
+  }
+  const out = { ...serializeTrackSound(t), has };
+  if (!has.pattern) {
+    out.automation = laneCopy(t.patterns[slot]?.automation);
+    return out;
+  }
+  // Both: the pattern too, lanes and all (they are in `pattern.automation`).
+  const p = serializeTrack(t).patterns[slot];
+  out.pattern = { ...p, automation: laneCopy(p.automation), soundLocked: false, sound: null };
+  return out;
+}
+
+/** A track's sound as a patch stores it. @param {Track} t */
+function serializeTrackSound(t) {
   return {
     _kind: "track-patch",
     // A saved custom-Tone patch is stored as engineKey "custom" + customConfig.
@@ -1010,10 +1071,42 @@ export function serializeTrackPatch(t) {
   };
 }
 
+/**
+ * A patch's pattern, onto the pattern `t` is on: the paste routine's rules
+ * (track.js), so the p-lock stays the track's and a lane its engine cannot
+ * play is dropped. `lanes` false leaves the lanes out (a pattern-only patch
+ * is the notes).
+ */
+function applyPatchPattern(t, patch, lanes = false) {
+  if (!patch.pattern || t.engineKey === "bus") return;
+  const p = clonePattern(patch.pattern);
+  p.probs = p.probs.map(normalizeProb);
+  p.conds = p.conds.map(normalizeCond);
+  p.automation = lanes ? laneCopy(p.automation) : {};
+  writePatternOnto(t, trackSlot(t), p);
+}
+
+/** A sound patch's lanes, onto the pattern `t` is on, tiled to its length. */
+function applyPatchLanes(t, automation) {
+  const p = t.patterns[trackSlot(t)];
+  if (!p) return;
+  const n = p.steps.length;
+  const next = {};
+  for (const [k, lane] of Object.entries(laneCopy(automation))) {
+    if (!canAutomate(t, k) || !lane.values.length) continue;
+    next[k] = { enabled: lane.enabled, values: Array.from({ length: n }, (_, i) => lane.values[i % lane.values.length]) };
+  }
+  // The patch's lanes are the sound's: the ones the old sound had go with it.
+  p.automation = next;
+  aliasPattern(t, trackSlot(t));
+}
+
 /** @param {Track} t @param {any} patch */
 export function applyTrackPatch(t, patch) {
   if (!patch) return;
   migrateTrackNames(patch);   // patches saved before the emulators were renamed
+  const has = patchHas(patch);
+  if (!has.sound) { applyPatchPattern(t, patch); return; }
   // Migrate legacy sample engines in saved patches onto the unified sampler.
   if (patch.engineKey) {
     let ek = patch.engineKey;
@@ -1126,8 +1219,14 @@ export function applyTrackPatch(t, patch) {
   // says otherwise.
   refreshCompSourceDropdowns();
   if (state.ready) applyCompressorConfig(t);
+  // What came with the sound: a pattern, or the lanes of one. After the
+  // engine is in place, since a lane is kept only if it can play.
+  if (has.pattern && patch.pattern) applyPatchPattern(t, patch, true);
+  else if (patch.automation) applyPatchLanes(t, patch.automation);
   updatePlaitsControlsVisibility(t);
   renderStepGrid(t);
+  refreshAutIfOpen(t);
+  refreshParamIndicators(t);
   t._refreshSaveEnabled?.();
 }
 
