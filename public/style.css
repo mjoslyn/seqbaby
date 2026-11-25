@@ -3521,6 +3521,8 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   /* fill, the mute scenes and master: a line of their own under the icons */
   .sq-transport .sq-perf { order: 4; flex: 1 1 auto; justify-content: space-between; }
   .sq-transport #master-btn, .sq-transport #cue-btn { order: 4; flex: 0 0 auto; }
+  .sq-transport .sq-track-switch { order: 4; flex: 1 1 110px; min-width: 0; }
+  .sq-transport .sq-track-switch select { flex: 1 1 auto; min-width: 0; max-width: none; min-height: 40px; }
   .sq-transport .sq-perf #fill-btn, .sq-transport #master-btn, .sq-transport #cue-btn { min-height: 40px; padding: 0 14px; }
   .sq-transport .sq-mute-scenes button { min-height: 40px; min-width: 40px; }
   .sq-transport .sq-history button,
@@ -4984,6 +4986,12 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 #master-btn.is-on { color: var(--accent); border-color: var(--accent); }
 /* Cue (cue.js): the buttons only show while a cue output is switched on. */
 #cue-btn.is-on { color: #ffd166; border-color: #ffd166; }
+/* The track switcher (trackSwitch.js). */
+.sq-track-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
+.sq-track-switch select { max-width: 150px; text-overflow: ellipsis; }
+@keyframes sq-focus-flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+.sq-track.is-focus-flash { animation: sq-focus-flash 0.9s ease-out; }
+@media (prefers-reduced-motion: reduce) { .sq-track.is-focus-flash { animation: none; outline: 2px solid var(--accent); } }
 .sq-track__cue, .sq-mix__cue { display: none; }
 body.sq-cue-on .sq-track__cue, body.sq-cue-on .sq-mix__cue { display: inline-flex; align-items: center; justify-content: center; }
 .sq-track__cue[aria-pressed="true"], .sq-mix__cue[aria-pressed="true"] { background: #ffd166; color: #0b0d10; border-color: #ffd166; }

@@ -102,6 +102,7 @@ export const ENGINE_MODULES = [
   "main.js",
   "master.js",
   "cue.js",
+  "trackSwitch.js",
   "measure.js",
   "meter.js",
   "meters.js",

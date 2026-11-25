@@ -633,6 +633,8 @@ export const STUDIO_BODY = String.raw`
     <!-- The master chain (master.js): tone, glue and drive on the whole mix. -->
     <button id="master-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="master: tone, glue compression and drive on the whole mix, before the limiter">master</button>
     <button id="cue-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="cue: hear tracks on their own before they are in the mix, through an audio interface's second pair of outputs or split mono (mix left, cue right)">cue</button>
+    <!-- The track switcher (trackSwitch.js): go to a track from the pinned bar. -->
+    <label class="sq-track-switch" title="go to a track: it scrolls into place under the pinned bars (or becomes the selected track in the other views) and the computer keys play it"><span>track</span><select id="track-switch" aria-label="go to a track"></select></label>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
          (a timeline of pattern blocks). Tab cycles them. Desktop only. -->

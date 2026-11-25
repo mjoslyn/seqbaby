@@ -219,6 +219,8 @@ env / fx / eq / comp / mod / automation per track.
   section.
 - `master.js` — the master chain: tone, glue and drive between the master
   gain and the limiter, and its panel. See the master chain section.
+- `trackSwitch.js` — the transport's `track` select: go to a track from the
+  pinned bar (`focusTrack`). See the transport section.
 - `cue.js` — the headphone cue: a cue button per track, a cue bus, and where
   it goes (split mono, or an interface's second pair). Also the one place the
   master meets `ctx.destination`. See the cue section.
@@ -2686,6 +2688,19 @@ And it can't be left down until the next start either, which is what it used to
 do — the keyboard plays through the same bus, so every key was silent once you'd
 pressed stop. `Tone.getTransport().start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
+
+**The track switcher** (`trackSwitch.js`, the transport's `track` select, on
+every device). Picking a track focuses it (`focusTrack`): it becomes the
+keyboard's track (`setActiveTrack`, which now announces
+`seqbaby:activetrack`; a bus is shown but the keys stay put), and
+`seqbaby:focustrack` goes out. In the groove view the page scrolls so the
+card sits 8px under the pinned bars (`pinnedBottom`: each sticky bar's offset
+plus its height) and flashes; in the other views the open view's detail
+(`makeTrackDetail` listens, when its container is on screen) selects it, so
+its card is the one in the bottom pane. The options are rebuilt when the
+select is about to open (pointerdown / focus / keydown) and on the session
+events, grouped by deck while a mix is loaded. Focus is not the song's:
+nothing is saved, undone or shared.
 
 ## Clips and the arrangement (`clips.js`, `arrangement.js`, `views.js`, `clipView.js`, `arrangeView.js`)
 
@@ -6612,7 +6627,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 102 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 103 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

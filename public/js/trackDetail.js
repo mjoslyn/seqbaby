@@ -111,6 +111,13 @@ export function makeTrackDetail(container, onChange, { buses = false, clips = fa
     if (clipRow._html !== html) { clipRow.innerHTML = html; clipRow._html = html; }
   }
   let selectedId = null;
+  // The transport's track switcher (trackSwitch.js): the open view's detail
+  // takes the track it names.
+  window.addEventListener("seqbaby:focustrack", (e) => {
+    if (!container.getClientRects().length) return;         // another view is open
+    const t = trackById(/** @type {CustomEvent} */ (e).detail?.id);
+    if (ok(t) && t.id !== selectedId) select(t);
+  });
 
   /** Select a track: its card comes in, the previous one goes home. */
   function select(t) {

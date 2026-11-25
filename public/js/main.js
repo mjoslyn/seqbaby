@@ -24,6 +24,7 @@ import { initVim } from "./vim.js";
 import { initPerform } from "./perform.js";
 import { initMasterUI } from "./master.js";
 import { initCue } from "./cue.js";
+import { initTrackSwitch } from "./trackSwitch.js";
 import { installKnobRecord } from "./knobRecord.js";
 import { installSetRecorder } from "./setRecorder.js";
 import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -778,6 +779,7 @@ export function init() {
   initPerform();
   initMasterUI();
   initCue();
+  initTrackSwitch();
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
     initVim();

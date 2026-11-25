@@ -70,6 +70,7 @@ export function setActiveTrack(t) {
     other.el?.classList.toggle("is-kbd-active", other.id === t.id);
     paintStepCursor(other);    // the step-input cursor follows the keyboard's track
   }
+  try { window.dispatchEvent(new CustomEvent("seqbaby:activetrack", { detail: { id: t.id } })); } catch {}
 }
 
 /**
