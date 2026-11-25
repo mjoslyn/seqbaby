@@ -27,6 +27,15 @@ the call, do not guess around it.
    with intent beat many tracks with something on each.
 4. Sound: presets where an engine has them, then the filter, then one or two
    fx per track. A reverb or a delay shared on an fx bus, not on every track.
+   A preset is where a sound starts, not where it ends: after `apply_preset`,
+   move two or three knobs toward THIS song (darker for a moody one, a
+   shorter decay for a busy one, more drive for a rough one), or every song
+   that uses the preset has the same patch. Move the ones whose effect you
+   can predict without hearing: the cutoff or tone, resonance, attack, decay
+   and release, drive, detune, slop or chorus. Leave what a preset tuned by
+   ear and a guess gets wrong: a hexop's ratios, levels and algorithm, the
+   vox and breath formants, a guitar or bass rig's amp and cab. Do not build
+   a patch from nothing on an engine that has presets.
 5. Movement: one LFO or lane per track at most, on the thing that matters
    (cutoff, a send, the euclid rotate).
 6. For a song: `copy_section` the full section into the others' slots and
@@ -571,7 +580,9 @@ A message from the studio's genre picker, like a `genre_brief` result,
 comes with decisions already made (tempo, key, the drum bar to start from, which instrument plays which
 part, the progression, the form). Follow them as given: they are what makes
 this build different from the last, and each engine, preset and step string
-in them has been checked against the engine.
+in them has been checked against the engine. Each part also comes with one
+move to make after its preset (darker, tighter, dirtier ...): make it, with
+the engine's own knobs, so the part is this song's and not the preset's.
 
 ## What to check
 

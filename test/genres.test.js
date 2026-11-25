@@ -2,6 +2,7 @@
 // they send, with every plan held to the engine's own tables.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as genres from "../app/songs/genres.js";
 import { FAMILY_PLANS, GENRES, GENRE_FAMILIES, KITS, genreById, genrePrompt, parseForm, parseVoice, rollGenre, rollSummary, searchGenres } from "../app/songs/genres.js";
 import * as sb from "../public/js/songBuilder.js";
 import { TOOLS } from "../mcp/tools.mjs";
@@ -229,4 +230,29 @@ test("a genre with no drums says so, and rolls no kit", () => {
     assert.match(p, /No drum kit/);
     assert.doesNotMatch(p, /- Drums:/);
   }
+});
+
+test("each part of a build is moved off its preset, a low part from its own pool", () => {
+  const { LOW_SHAPES, VOICE_SHAPES } = genres;
+  let seen = 0;
+  const used = new Set();
+  for (const g of genres.GENRES) {
+    for (const seed of [1, 2, 3]) {
+      const roll = genres.rollGenre(g, seed);
+      for (const v of roll.voices || []) {
+        if (g.id === "chiptune") { assert.equal(v.shape, undefined); continue; }
+        const pool = /bass|sub/.test(v.role) ? LOW_SHAPES : null;
+        assert.ok((pool || [...LOW_SHAPES, ...VOICE_SHAPES]).includes(v.shape), `${g.id} ${v.role}`);
+        assert.equal(genres.rollGenre(g, seed).voices.find((o) => o.role === v.role).shape, v.shape);
+        used.add(v.shape); seen++;
+      }
+    }
+  }
+  assert.ok(seen > 500);
+  assert.equal(used.size, LOW_SHAPES.length + VOICE_SHAPES.length, "every move is reachable");
+  const g = genres.genreById("dub-techno");
+  const prompt = genres.genrePrompt(g, "", 18);
+  assert.match(prompt, /Then make it this song's: /);
+  assert.match(prompt, /leave what the preset tuned by ear alone/);
+  assert.doesNotMatch(genres.genrePrompt(genres.genreById("chiptune"), "", 3), /make it this song's/);
 });

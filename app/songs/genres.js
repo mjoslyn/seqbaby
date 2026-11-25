@@ -1748,6 +1748,30 @@ function rnd(seed, id, key) {
   return (h >>> 0) / 4294967296;
 }
 
+// How a part's sound is moved off its preset for this build. A preset is the
+// same sound in every song that rolls it, and a model that cannot hear is a
+// poor judge of a patch built from nothing, so the roll asks for a direction
+// instead: one move, on the knobs whose effect is predictable blind (the
+// filter, envelope times, drive, detune). Nothing here touches what a preset
+// gets right by ear and a guess gets wrong (FM ratios, formants, amp and cab).
+// Low parts have their own pool: a bass is not widened or given a long tail.
+const LOW_ROLE = /bass|sub|rumble|reese|wobble|acid|tuba/;
+export const LOW_SHAPES = [
+  "darker than the preset: its cutoff or tone down a little, the top rolled off",
+  "more bite than the preset: its cutoff or tone up a little, a touch of resonance where it has one",
+  "tighter than the preset: its decay or sustain shorter, so the notes stop before the next kick",
+  "rounder and longer than the preset: its decay a little longer, the attack soft",
+  "dirtier than the preset: its drive up a notch, so the harmonics carry on a small speaker",
+];
+export const VOICE_SHAPES = [
+  "darker than the preset: the filter's cutoff down, a touch of resonance",
+  "brighter and more open than the preset: its tone or cutoff up, nothing rolled off",
+  "shorter and more plucked than the preset: its decay and release down",
+  "softer and longer than the preset: a slower attack where it has one, a longer release",
+  "dirtier than the preset: its drive up a notch, or a little cassette or shaper in its rack",
+  "wider and less steady than the preset: a little more detune, slop, drift or chorus",
+];
+
 /** `dm:sub/house sub` -> { engine, preset }. @param {string} spec */
 export function parseVoice(spec) {
   const i = spec.indexOf("/");
@@ -1805,6 +1829,10 @@ export function rollGenre(g, seed = 0) {
   const [emin, emax] = plan.extras || [1, 2];
   const n = Math.min(opt.length, emin + Math.floor(r("extras") * (emax - emin + 1)));
   roll.voices.push(...some("extra", opt, n).map((role) => voice(role, plan.optional[role])));
+  // Chiptune is the one genre whose sounds are meant to be the bare chip's.
+  if (g.id !== "chiptune") {
+    for (const v of roll.voices) v.shape = pick("shape:" + v.role, LOW_ROLE.test(v.role) ? LOW_SHAPES : VOICE_SHAPES);
+  }
   roll.left = opt.filter((role) => !roll.voices.some((v) => v.role === role));
   const has = new Set(roll.voices.map((v) => v.role));
   const moves = plan.moves.map((m) => /^\[([^\]]+)\] (.*)$/.exec(m) || [m, "", m]).filter((m) => !m[1] || has.has(m[1]));
@@ -1855,7 +1883,10 @@ export function genrePrompt(g, extra = "", seed = 0) {
   }
   if (roll.voices && !roll.drums) add("No drum kit: a faint pulse at most.");
   for (const v of roll.voices || []) {
-    add(`${v.role}: ${v.engine}${v.preset ? `, preset "${v.preset}"` : ""}.${v.how ? ` ${v.how[0].toUpperCase()}${v.how.slice(1)}.` : ""}`);
+    add(`${v.role}: ${v.engine}${v.preset ? `, preset "${v.preset}"` : ""}.${v.how ? ` ${v.how[0].toUpperCase()}${v.how.slice(1)}.` : ""}${v.shape ? ` Then make it this song's: ${v.shape}.` : ""}`);
+  }
+  if ((roll.voices || []).some((v) => v.shape)) {
+    add("Those sound moves are small and on purpose: a preset is where a sound starts, and the move is what keeps it from being the same patch as the last build. Use the knobs the engine has for it (describe_engine names them), a few at most, and leave what the preset tuned by ear alone: an FM voice's ratios and algorithm, formants, the amp and cab. Where the genre or the angle above says otherwise, they win.");
   }
   if (roll.voices) add(`No other melodic parts${roll.left.length ? ` (no ${roll.left.join(", no ")})` : ""}; a riser or an fx bus is fine.`);
   if (roll.harmony) add(`Harmony, in that scale: ${roll.harmony}.`);

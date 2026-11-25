@@ -5746,7 +5746,15 @@ strings), an engine and preset per part, which optional parts exist at all,
 how the bass plays, the progression (which carries its scale, `scale: chords`,
 since notes snap to the scale and a progression only fits its own; `chromatic`
 where a style lives on passing notes, as bebop does), two signature moves and
-the genre's `avoid` list. A move that needs an optional part is written
+the genre's `avoid` list. **Each part is also moved off its preset**
+(`v.shape`, from `LOW_SHAPES` for a bass or sub and `VOICE_SHAPES` for the
+rest): one direction per part per build (darker, tighter, dirtier, wider
+...), since a preset is the same patch in every song that rolls it and a
+model that cannot hear is a poor judge of one built from nothing. The moves
+name only knobs whose effect is predictable blind (cutoff or tone, envelope
+times, drive, detune), and the prompt says to leave what a preset tuned by
+ear alone (FM ratios, formants, amp and cab); the compose guide's sound step
+says the same for an ordinary ask. Not on chiptune. A move that needs an optional part is written
 `[role] ...` and only drawn in a build that has the part; a plan with no
 `drums` (ambient, ragtime, gypsy jazz) rolls no kit and says so.
 **A plan may have a grid of its own.** `eighths: true` writes the song a step
