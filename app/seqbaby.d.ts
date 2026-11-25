@@ -32,9 +32,9 @@ declare global {
         close: () => Promise<void>;
         replay: () => SetReplayState | null;
         /** Where a paused replay is, as a starting point to record a new set from. */
-        forkPoint: () => { start: unknown; step: number };
+        forkPoint: () => { start: unknown; step: number; rest?: unknown };
         /** Open the studio on a fork point, armed to record. */
-        openFork: (point: { start: unknown; step: number }, opts?: { setId?: string | null }) => Promise<void>;
+        openFork: (point: { start: unknown; step: number; rest?: unknown }, opts?: { setId?: string | null }) => Promise<void>;
       };
       serializeSet: () => unknown;
       /** Start / stop the transport (idempotent, unlike the play button). */

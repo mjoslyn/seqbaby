@@ -268,7 +268,7 @@ function announceRec() {
  */
 export function toggleSetRecord(opts = {}) {
   if (recorder) { finishRecording(); return; }
-  if (replay) { setStatus("a set is playing back: stop it to record", true); return; }
+  if (replay && !replay.overdub) { setStatus("a set is playing back: stop it to record", true); return; }
   recorder = { phase: "armed", forkedFrom: opts.forkedFrom ?? null, forkStep: opts.forkStep ?? null };
   if (state.playing) beginRecording();
   else setStatus("set recording armed: it starts with play, and ends with stop");
@@ -308,8 +308,8 @@ function stamp() {
   return [rel, Math.round(frac * 1000) / 1000];
 }
 
-function push(kind, data) {
-  if (!recorder || recorder.phase !== "recording" || replaying) return;
+function push(kind, data, force = false) {
+  if (!recorder || recorder.phase !== "recording" || (replaying && !force)) return;
   const [step, frac] = stamp();
   const ev = recorder.rec.events;
   // in order: an event stamped for a step a perf sample has already passed
@@ -349,9 +349,12 @@ function recordStep(time, dur) {
 export function finishRecording() {
   const r = recorder;
   recorder = null;
+  // an overdub is one take: the set playing under it goes with the recording
+  if (replay?.overdub) { clearTimers(replay); replay = null; }
   announceRec();
   if (!r?.rec) { setStatus("set recording disarmed"); return null; }
-  flushPatchNow(r);
+  recorder = r;                       // push() writes to the recorder in place
+  try { flushPatchNow(r); } finally { recorder = null; }
   const rec = r.rec;
   if (!rec.marks.length || rec.marks[rec.marks.length - 1][0] < rec.steps) rec.marks.push([rec.steps, rec.seconds]);
   if (rec.steps < 1) { setStatus("nothing recorded"); return null; }
@@ -442,17 +445,17 @@ function onInteraction(e) {
   requestAnimationFrame(() => { patchQueued = false; if (recorder) flushPatchNow(recorder); });
 }
 
-function flushPatchNow(r) {
-  if (!r || r.phase !== "recording" || replaying || r.rebase) return;
+function flushPatchNow(r, force = false) {
+  if (!r || r.phase !== "recording" || (replaying && !force) || r.rebase) return;
   const next = songSnapshot(r.base);
   const p = diffSession(r.base, next);
-  if (p) { r.base = next; push("patch", { p }); }
+  if (p) { r.base = next; push("patch", { p }, force); }
   const decks = deckSnapshots();
   for (const [id, s] of Object.entries(decks)) {
     const was = r.deckBase[id];
     if (!was) continue;                                 // a deck that arrived: its load is its event
     const dp = diffSession(was, s);
-    if (dp) push("patch", { d: id, p: dp });
+    if (dp) push("patch", { d: id, p: dp }, force);
   }
   r.deckBase = decks;
 }
@@ -483,9 +486,11 @@ function onMacro(pad, phase, x, y) {
 }
 
 function onTransport() {
+  // an overdub that was playing and stopped is over (finishRecording, below,
+  // lets the set under it go)
   // the transport stopped under a replay by something else (the studio's own
   // stop): the counts are gone, so the next play finds its place again
-  if (!state.playing && replay?.playing && !replaying) {
+  if (!state.playing && replay?.playing && !replaying && !replay.overdub) {
     clearTimers(replay);
     replay.playing = false;
     replay.needsSeek = true;
@@ -497,9 +502,14 @@ function onTransport() {
       restoreCounters(pendingCounters, { tick: true });
       pendingCounters = null;
     }
+    // an overdub: the set under it starts with the transport's own play press
+    if (replay?.overdub && !replay.playing) replay.playing = true;
     if (recorder?.phase === "armed") beginRecording();
   } else if (recorder?.phase === "recording") {
     finishRecording();
+  } else if (replay?.overdub && replay.playing) {
+    clearTimers(replay);
+    replay = null;
   }
 }
 
@@ -528,7 +538,16 @@ function replayStep(time, dur) {
     const ms = Math.max(0, e[1] * dur * 1000);
     r.timers.push(setTimeout(() => applyThrough(i), ms));
   }
-  if (rel >= r.rec.steps) { r.ended = true; setTimeout(() => endReplay(), 0); }
+  if (rel >= r.rec.steps) {
+    if (r.overdub) {
+      // the set under an overdub ran out: the transport and the recorder go on
+      replay = null;
+      setStatus("the set has played out: you are on your own, still recording until stop");
+      return;
+    }
+    r.ended = true;
+    setTimeout(() => endReplay(), 0);
+  }
   r.onStep?.(rel);
 }
 
@@ -543,10 +562,25 @@ function applyThrough(i, time) {
   while (r.idx <= i && r.idx < r.rec.events.length) {
     const e = r.rec.events[r.idx++];
     replaying++;
-    try { applyEvent(e, time); }
+    try { applyEvent(e, time); if (r.overdub) carryOver(e); }
     catch (err) { console.warn("[seqbaby] set: an event would not play back", e[2], err); }
     finally { replaying--; }
   }
+}
+
+/**
+ * An overdub: what the set under it just did goes into the new recording too,
+ * so the fork plays back as both. The sampled state needs nothing (recordStep
+ * reads it whole, whoever moved it). A control, a pad or a deck move is logged
+ * again where it landed; an edit to the song is taken as the diff against the
+ * recorder's own base, which also keeps that base where the song now is.
+ */
+function carryOver([, , kind, data]) {
+  const rc = recorder;
+  if (!rc || rc.phase !== "recording" || kind === "perf") return;
+  if (kind === "patch") { flushPatchNow(rc, true); return; }
+  push(kind, data, true);
+  if (kind === "deck" || kind === "eject" || kind === "mix") rebaseWhenSettled(rc);
 }
 
 function applyEvent([, , kind, data], time) {
@@ -755,23 +789,51 @@ export function replayState() {
 export function forkPoint() {
   const r = replay;
   const start = captureStart();
-  if (r?.paused) start.counters = r.paused;
-  return { start, step: r?.step ?? 0 };
+  if (r && !r.ended) start.counters = r.paused || r.counters;
+  // What the set has still to do, for an overdub: the events not yet laid
+  // down, numbered as they were (the counters above keep the set's own tick).
+  let rest = null;
+  if (r && !r.ended && r.step < r.rec.steps) {
+    rest = {
+      events: r.rec.events.slice(r.idx), steps: r.rec.steps, marks: r.rec.marks, seconds: r.rec.seconds,
+      base: r.base, perf: r.perf,
+    };
+  }
+  return { start, step: r?.step ?? 0, rest };
 }
 
 /** Open the studio on a fork point and arm the recorder, which remembers where it came from. */
 export async function openFork(point, { setId = null } = {}) {
+  if (replay) { clearTimers(replay); replay = null; }
   await restoreStart(point.start);
   recorder = null;
+  const rest = point.rest;
+  if (rest?.events && rest.steps > (point.step ?? 0)) {
+    // An overdub: the rest of the set plays under whatever is done on top,
+    // and the recorder takes both (carryOver). It starts with the transport's
+    // own play press (onTransport) and ends with stop, or when the set does.
+    replay = {
+      rec: { events: rest.events, steps: rest.steps, marks: rest.marks || [], seconds: rest.seconds || 0 },
+      base: rest.base, idx: 0, step: point.step ?? 0, timers: [], waits: [], playing: false,
+      perf: rest.perf || point.start.perf, counters: point.start.counters,
+      followView: false, overdub: true,
+    };
+    // the clips the set had queued when it was paused (a stop lets them go)
+    replaying++;
+    try { restorePerf(replay.perf); } finally { replaying--; }
+  }
   toggleSetRecord({ forkedFrom: setId, forkStep: point.step ?? null });
-  setStatus("forked: press play to carry on from here, recording a new set");
+  setStatus(replay
+    ? "forked: press play and the rest of the set plays under you. Everything you do on top is recorded into a new set"
+    : "forked: press play to carry on from here, recording a new set");
 }
 
 // ---- install -----------------------------------------------------------------
 
 function step(time, dur) {
   if (replay) replayStep(time, dur);
-  else if (recorder) recordStep(time, dur);
+  // an overdub is both: the set's step first, so the sample below has it
+  if (recorder && (!replay || replay.overdub)) recordStep(time, dur);
 }
 
 export function installSetRecorder() {

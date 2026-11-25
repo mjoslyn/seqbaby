@@ -6128,10 +6128,26 @@ events are.
   keeps the counters for the next play: `pendingCounters`), `seek` (restore,
   then the events up to a step with only each control's last value),
   `forkPoint` (the studio as it stands, as a new start).
-- **Fork**: the player puts the fork point in IndexedDB (`app/set/forkStore.ts`,
-  it is megabytes with samples) and opens `/studio?fork=1`;
-  `app/SetRecordPanel.tsx` takes it, calls `openFork` (restore and arm), and
-  the saved set carries `forked_from` / `fork_step`.
+- **Fork is an overdub.** `forkPoint()` is the studio as it stands plus
+  `rest`: the events the set has not laid down yet (numbered as they were,
+  with the set's own tick in the counters), its length and its sampled state.
+  The player puts it in IndexedDB (`app/set/forkStore.ts`, it is megabytes
+  with samples) and opens `/studio?fork=1`; `app/SetRecordPanel.tsx` takes
+  it and calls `openFork`, which restores the studio, arms the recorder and,
+  when there is a `rest`, makes a replay flagged `overdub`. The transport's
+  own play press starts both (`onTransport`); each step runs the set's step
+  and then the recorder's (`step`), so the sample holds whoever moved it,
+  and every logged event the set plays is logged again in the new recording
+  (`carryOver`: a control, pad or deck move pushed where it landed, an edit
+  taken as the diff against the recorder's own base). The set's writes are
+  diffs, so a clip launched or a knob turned on top stays until the set
+  moves the same thing. One take: stop ends both, and when the set runs out
+  the transport and the recorder go on alone. The saved set carries
+  `forked_from` / `fork_step` and plays back as both. A fork from the end of
+  a set has no `rest` and is a plain fork.
+- **The player's frame is open while it plays** (scroll, views, panels):
+  what is touched there is the frame's alone, the replay goes on over it and
+  a seek puts the set back. It is covered only while the studio is set up.
 - **Storage**: a `sets` row (0003_sets.sql) for the lists, the recording in R2
   at `sets/<id>/set.json`. `lib/data/sets.js`, its rules in
   `test/data.test.js`; routes `app/api/sets` (bodies are megabytes). The
@@ -6139,7 +6155,7 @@ events are.
   engine's by `test/setFormat.test.js`, since public/js stays out of the Next
   graph. Sets show on the owner's profile (private ones to the owner only) and in settings (`app/settings/SetManager.tsx`: play, rename, publish, delete).
 - **The player** (`/set/<id>`) is the real studio in a visible same-origin
-  frame on `/studio?embed`, with a shield over it while playing.
+  frame on `/studio?embed`, as tall as the window leaves.
 - Known limits: computer-keyboard notes are not recorded; a step edit lands
   on the interaction that ends it (a long paint arrives at pointerup); the
   crossfader by hand is sampled per step.

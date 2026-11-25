@@ -9,11 +9,14 @@ import styles from "./setPlayer.module.css";
 // `window.seqbaby.sets` (setRecorder.js): load puts it at the set's start,
 // play lays the recording down step by step, pause stops the transport and
 // keeps the place, the scrubber goes to a step, and fork hands the studio as
-// it stands to a fresh studio tab, armed to record a new set from there.
+// it stands, with what the set has still to do, to the studio itself: the
+// rest of the set plays there under whatever is done on top, and both are
+// recorded as a new set (an overdub, setRecorder.js's openFork).
 //
-// While it plays, a shield covers the frame: a click in the studio would be
-// an edit the recording does not know about, and the replay would go on over
-// it. Paused, the studio is yours to look around before forking.
+// The frame is open while it plays: scroll it, switch views, open a panel.
+// Whatever is touched here is this frame's alone (the replay goes on over it,
+// and a seek puts the set back), so playing along belongs in a fork. Only
+// while the studio is being set up is the frame covered.
 
 type Api = NonNullable<Window["seqbaby"]>;
 type Status = "booting" | "loading" | "ready" | "playing" | "paused" | "error";
@@ -117,7 +120,7 @@ export default function SetPlayer({ id, title, owned, isPublic }: { id: string; 
   const fork = async () => {
     const api = apiRef.current;
     if (!api?.sets) return;
-    if (status === "playing") await api.sets.pause();
+    if (status === "playing") { await api.sets.pause(); setStatus("paused"); }
     setMsg("handing the studio over…");
     try {
       const point = api.sets.forkPoint();
@@ -174,7 +177,7 @@ export default function SetPlayer({ id, title, owned, isPublic }: { id: string; 
           onPointerUp={() => scrub != null && void seek(scrub)}
           onKeyUp={() => scrub != null && void seek(scrub)}
         />
-        <button className={styles.btn} onClick={() => void fork()} disabled={busy} title="take the studio as it is at this moment, and record a new set from here">
+        <button className={styles.btn} onClick={() => void fork()} disabled={busy} title="open the studio at this moment: the rest of the set plays under you, and what you do on top is recorded as a new set of your own">
           fork from here
         </button>
         {owned && (
@@ -186,14 +189,16 @@ export default function SetPlayer({ id, title, owned, isPublic }: { id: string; 
           {copied ? "copied" : "copy link"}
         </button>
       </div>
-      {msg && <div className={status === "error" ? styles.error : styles.msg}>{msg}</div>}
+      {msg ? (
+        <div className={status === "error" ? styles.error : styles.msg}>{msg}</div>
+      ) : (
+        <div className={styles.msg}>
+          look around while it plays: scroll, switch views, open a panel. To play along, fork from here: the rest of the set plays under you and both are recorded.
+        </div>
+      )}
       <div className={styles.stage}>
         <iframe ref={frameRef} className={styles.frame} src="/studio?embed" title={`${title}: the studio`} allow="autoplay" />
-        {(playing || busy) && (
-          <div className={styles.shield} aria-hidden>
-            {playing ? <span>playing back · pause to look around or fork</span> : null}
-          </div>
-        )}
+        {busy && <div className={styles.shield} aria-hidden />}
       </div>
     </div>
   );

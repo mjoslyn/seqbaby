@@ -12,7 +12,7 @@ const DB = "seqbaby-sets";
 const STORE = "fork";
 const KEY = "pending";
 
-export type ForkHandoff = { point: { start: unknown; step: number }; setId: string | null; title?: string };
+export type ForkHandoff = { point: { start: unknown; step: number; rest?: unknown }; setId: string | null; title?: string };
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
