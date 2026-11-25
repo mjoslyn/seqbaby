@@ -1,3 +1,4 @@
+import { toggleCue } from "./cue.js";
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, patchHas, serializeTrackPatch } from "./session.js";
@@ -1606,6 +1607,7 @@ export function renderTrack(t) {
   }
   wireCompPanel(t, t._compPanelEl);
 
+  node.querySelector(".sq-track__cue")?.addEventListener("click", () => toggleCue(t));
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
     t.muted = !t.muted;
     refreshMuteSoloUI(t);

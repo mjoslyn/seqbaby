@@ -13,6 +13,7 @@
 // which is why it is only ever called in that throwaway frame, never in the
 // studio a person is working in.
 
+import { speakersOff, speakersOn } from "./cue.js";
 import { state, switchPattern } from "./state.js";
 import { applySet } from "./session.js";
 import { ensureAudio, startPlayback, stopPlayback } from "./transport.js";
@@ -73,7 +74,7 @@ export async function measureSet(session, { maxSections = 6, maxSeconds = 5, bud
     onLoaded?.();
     out = state.masterLimiter || state.masterGain;
     if (!ok || !out || state.audioCtx?.state !== "running") return { error: "audio is locked" };
-    try { out.disconnect(state.audioCtx.destination); } catch {}
+    speakersOff();
 
     const tracks = liveTracks(session);
     const bufs = new Map();
@@ -122,6 +123,6 @@ export async function measureSet(session, { maxSections = 6, maxSeconds = 5, bud
     return { error: String(e?.message || e) };
   } finally {
     try { await stopPlayback(); } catch {}
-    if (out && state.audioCtx) { try { out.connect(state.audioCtx.destination); } catch {} }
+    if (out && state.audioCtx) speakersOn();
   }
 }

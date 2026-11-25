@@ -1,3 +1,4 @@
+import { cuePlays, wireOutput } from "./cue.js";
 import { restoreLaneBases, runAutomationForStep } from "./automation.js";
 import { fireMetronome, paintBeatIndicator, repeatReadout } from "./beat.js";
 import { engineByKey } from "./catalog.js";
@@ -186,7 +187,9 @@ export async function ensureAudio() {
     // Between the two sits the master chain (master.js): tone, glue and
     // drive, each out of the circuit until it is turned up.
     initMasterChain();
-    state.masterLimiter.connect(state.audioCtx.destination);
+    // to the device, by way of the cue's routing (cue.js): stereo, split mono
+    // or an interface's extra pair
+    wireOutput();
     state.masterAnalyser = state.audioCtx.createAnalyser();
     state.masterAnalyser.fftSize = 1024;
     state.masterAnalyser.smoothingTimeConstant = 0.25;
@@ -570,7 +573,7 @@ export async function startPlayback(opts = {}) {
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
       // Deck B of a mix that has not been started is withheld the same way.
-      if (!isBus && (t._clipOff || t._leaving || t._staged || deckSilent(t) || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
+      if (!isBus && (t._clipOff || t._leaving || t._staged || deckSilent(t) || ((soloAudible ? !soloAudible.has(t) : t.muted) && !cuePlays(t)))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;

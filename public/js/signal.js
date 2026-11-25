@@ -1,3 +1,4 @@
+import { setCueResync, syncCue } from "./cue.js";
 import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { holdParamAt } from "./paramHold.js";
@@ -141,6 +142,8 @@ function armBedTail(t, seconds) {
  */
 export function refreshNoiseBeds() {
   const soloAudible = soloAudibleTracks();
+  // the cue's taps and gates turn on the same things (mute, solo, a rack rebuilt)
+  syncCue(soloAudible);
   for (const t of state.tracks) {
     if (!t.fxRack) continue;
     try { t.fxRack.setNoiseBedActive(noiseBedActive(t, soloAudible)); } catch {}
@@ -404,6 +407,7 @@ export function routeTrackOutput(t, swap = false) {
   // every one of them. A bus rebuilt has a new summing node, so its feeders'
   // `dest` is a different object and they are still re-pointed.
   syncTrackSends(t);
+  if (t._cue) syncCue(soloAudibleTracks());      // a rebuilt rack has a new tap point
   if (rack._routedTo === dest && rack._routedMeter === t.meterAnalyser) return;
   // `swap`: the new path carries the same signal at the same level as the
   // old one (the master, or a deck's bus at unity: mix.js), so there is
@@ -997,3 +1001,5 @@ export function refreshCompSourceDropdowns() {
   }
 }
 
+
+setCueResync(() => syncCue(soloAudibleTracks()));

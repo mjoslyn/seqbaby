@@ -23,6 +23,7 @@ import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys,
 import { initVim } from "./vim.js";
 import { initPerform } from "./perform.js";
 import { initMasterUI } from "./master.js";
+import { initCue } from "./cue.js";
 import { installKnobRecord } from "./knobRecord.js";
 import { installSetRecorder } from "./setRecorder.js";
 import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -776,6 +777,7 @@ export function init() {
   // Fill, the mute scenes and the master panel: every device.
   initPerform();
   initMasterUI();
+  initCue();
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
     initVim();

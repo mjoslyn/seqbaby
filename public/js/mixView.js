@@ -26,6 +26,7 @@
  * open, as the clip view is; never while a control in it is held.
  */
 
+import { toggleCue } from "./cue.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
@@ -266,6 +267,7 @@ function strip(t, shown) {
       ${proxy(t, ".p-vol", { cls: "is-fader", title: `${name}: level. Drag to move it; double-click to put it where you clicked` })}
     </div>
     <div class="sq-mix__ms">
+      <button type="button" class="sq-mix__cue" data-act="cue" aria-pressed="${!!t._cue}" title="cue: hear ${deckBus ? "this deck" : "it"} in the cue output, apart from the mix">C</button>
       <button type="button" class="sq-mix__mute" data-act="mute" aria-pressed="${!!t.muted}" ${t.soloed ? "disabled" : ""} title="mute">M</button>
       <button type="button" class="sq-mix__solo" data-act="solo" aria-pressed="${!!t.soloed}" ${t.muted ? "disabled" : ""} title="solo${deckBus ? ": hear this deck alone" : ""}">S</button>
       ${deckBus ? "" : `<button type="button" class="sq-mix__x" data-act="eject-track" title="${esc(t._deck ? `eject ${name}: take this one track off the deck (the deck's last track takes the deck with it)` : `remove ${name} from the song (it asks first, and undo brings it back)`)}" aria-label="eject ${esc(name)}">×</button>`}
@@ -764,6 +766,7 @@ async function onClick(e) {
   const el = e.target.closest(".sq-mix__strip");
   const t = el && trackById(el.dataset.trackId);
   if (!t) return;
+  if (act === "cue") { toggleCue(t); e.target.closest("[data-act=cue]")?.setAttribute("aria-pressed", String(!!t._cue)); scheduleMixPaint(); return; }
   if (act === "mute" || act === "solo") {
     // the track's own button, so one piece of code owns what mute means
     trackControl(t, act === "mute" ? ".sq-track__mute" : ".sq-track__solo")?.click();

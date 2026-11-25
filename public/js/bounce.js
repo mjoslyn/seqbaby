@@ -1,3 +1,4 @@
+import { speakersOff, speakersOn } from "./cue.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { arrangementBars } from "./arrangement.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
@@ -18,7 +19,7 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
   masterOut.connect(recDest);
   // Silent render: temporarily disconnect from ctx.destination so the
   // user doesn't hear the bounce; the recorder still gets the signal via recDest.
-  try { masterOut.disconnect(ctx.destination); } catch {}
+  speakersOff();
   const mimeCandidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4;codecs=mp4a.40.2", "audio/mp4"];
   const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported?.(m)) || "";
   const rec = new MediaRecorder(recDest.stream, mime ? { mimeType: mime } : undefined);
@@ -54,7 +55,7 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
   rec.stop();
   await stopped;
   try { masterOut.disconnect(recDest); } catch {}
-  try { masterOut.connect(ctx.destination); } catch {}
+  speakersOn();
 
   if (chainWhole && !arranged) setPatternMode(prevMode);
 

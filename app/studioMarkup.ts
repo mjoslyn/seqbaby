@@ -632,6 +632,7 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <!-- The master chain (master.js): tone, glue and drive on the whole mix. -->
     <button id="master-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="master: tone, glue compression and drive on the whole mix, before the limiter">master</button>
+    <button id="cue-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="cue: hear tracks on their own before they are in the mix, through an audio interface's second pair of outputs or split mono (mix left, cue right)">cue</button>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
          (a timeline of pattern blocks). Tab cycles them. Desktop only. -->
@@ -1001,6 +1002,7 @@ ${BREATH_PANEL}
         </div><!-- /track-synth-row -->
         <button class="sq-track__solo sq-btn--ghost" aria-pressed="false" title="solo">solo</button>
         <button class="sq-track__mute sq-btn--ghost">mute</button>
+        <button class="sq-track__cue sq-btn--ghost" type="button" aria-pressed="false" title="cue: hear this track in the cue output (the transport's cue button), apart from the mix. Muted, it plays in the cue only">cue</button>
         <button class="sq-track__plock sq-btn--ghost" aria-pressed="false" title="p-lock: give this track its own sound in THIS pattern. Normally one sound covers all 32 patterns, so moving the cutoff moves it everywhere. Locked, this pattern keeps its own params, filter, fx, eq, comp and mod settings while the unlocked ones go on sharing the track's. The button belongs to the pattern, so it changes as you move between them. Unlocking hands the sound back but keeps the snapshot, so locking again brings it straight in">p-lock</button>
         <button class="sq-track__clear sq-btn--ghost">clear</button>
         <button class="track-dice sq-icon-btn sq-btn--ghost" data-label="dice" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern. Drag up and down to set the density"></button>

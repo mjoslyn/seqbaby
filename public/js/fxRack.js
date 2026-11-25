@@ -431,7 +431,11 @@ export class FXRack {
     // ducks around a graph edit (see there). Its own node so the duck never
     // touches the amp level on `output`, which is a knob and a mod target.
     this.switchGain = ctx.createGain();
-    this.switchGain.connect(this.output);
+    // The cue's gate (cue.js): shut, the track is out of the mix while its
+    // cue tap, taken off switchGain, still hears it.
+    this.gate = ctx.createGain();
+    this.switchGain.connect(this.gate);
+    this.gate.connect(this.output);
     // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
     // the underlying native input node before connecting from a native source.
     const toneIn = (node) => node.input?.input ?? node.input ?? node;
@@ -716,10 +720,10 @@ export class FXRack {
       const l1 = biq("lowpass", 250), l2 = biq("lowpass", 250), h1 = biq("highpass", 4000), h2 = biq("highpass", 4000);
       const direct = ctx.createGain(), dLo = ctx.createGain(), dHi = ctx.createGain();
       dLo.gain.value = 0; dHi.gain.value = 0;
-      try { this.switchGain.disconnect(this.output); } catch {}
-      this.switchGain.connect(direct); direct.connect(this.output);
-      this.switchGain.connect(l1); l1.connect(l2); l2.connect(dLo); dLo.connect(this.output);
-      this.switchGain.connect(h1); h1.connect(h2); h2.connect(dHi); dHi.connect(this.output);
+      try { this.gate.disconnect(this.output); } catch {}
+      this.gate.connect(direct); direct.connect(this.output);
+      this.gate.connect(l1); l1.connect(l2); l2.connect(dLo); dLo.connect(this.output);
+      this.gate.connect(h1); h1.connect(h2); h2.connect(dHi); dHi.connect(this.output);
       this._bands = { direct, dLo, dHi, nodes: [l1, l2, h1, h2, direct, dLo, dHi] };
     }
     const b = this._bands;
@@ -1126,6 +1130,7 @@ export class FXRack {
     if (this._reverbTimer) { try { clearTimeout(this._reverbTimer); } catch {} this._reverbTimer = null; }
     if (this._softTimer) { try { clearTimeout(this._softTimer); } catch {} this._softTimer = null; this._softQueue = null; }
     try { this.switchGain.disconnect(); } catch {}
+    try { this.gate.disconnect(); } catch {}
     if (this._bands) { for (const n of this._bands.nodes) { try { n.disconnect(); } catch {} } this._bands = null; }
     for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
     this._bypassTimers = {};

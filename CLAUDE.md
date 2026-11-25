@@ -219,6 +219,9 @@ env / fx / eq / comp / mod / automation per track.
   section.
 - `master.js` — the master chain: tone, glue and drive between the master
   gain and the limiter, and its panel. See the master chain section.
+- `cue.js` — the headphone cue: a cue button per track, a cue bus, and where
+  it goes (split mono, or an interface's second pair). Also the one place the
+  master meets `ctx.destination`. See the cue section.
 - `session.js` — serialize/apply sets + track patches, legacy migration, and
   `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
   (the same list main.js builds at boot) by running a blank blob through
@@ -3332,7 +3335,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   without the view.
 - Known limits: one bar line and one swing for both decks; synced delays and
   LFOs stay on the song's tempo while mixing; deck B plays scenes, not its
-  arrangement; no headphone cue.
+  arrangement. (A headphone cue: see the cue section.)
 
 ## The piano roll (`pianoEditor.js` + `pianoView.js` + `pianoRoll.js` + `rollNotes.js`)
 
@@ -4084,6 +4087,53 @@ transport's `master` button (lit while anything is on).
   compressor, not a lookahead limiter. `test/master.test.js` pins the
   arithmetic; the nodes are the browser's.
 - Builder: `setMaster(song, {...})` (MCP `set_master`), `summarize().master`.
+
+## Cue: monitoring a track apart from the mix (`cue.js`)
+
+A DJ's headphone cue. The transport's `cue` button opens its panel; with an
+output switched on, every track, bus and mix strip shows a `cue` button
+(`body.sq-cue-on`), and a cued track is heard in the cue output.
+
+```
+track ─▶ rack.switchGain ─┬─▶ rack.gate ─▶ rack.output ─▶ mix
+                          └─▶ cue tap ─▶ cue bus ─▶ the cue's output
+```
+
+- **Two outputs** (`cueConfig().mode`). `split`: the mix summed to mono on
+  the left, the cue summed to mono on the right, so a splitter cable or one
+  ear each is the whole rig. `multi`: the destination is opened to the
+  interface's channels (`maxChannelCount`, discrete), the mix on 1/2 and the
+  cue on a chosen pair (3/4, 5/6...). It needs the interface to be the
+  system's output; under four channels the mode is refused with a status
+  line. `off` is plain stereo, exactly the graph it always was.
+- **`wireOutput()` is the one place the master's last node meets the
+  device.** transport.js calls it where it used to connect the limiter, and
+  a silent render (bounce.js, measure.js) calls `speakersOff()` /
+  `speakersOn()` instead of disconnecting the destination itself, since in a
+  cue mode the limiter is not connected to it directly.
+- **The tap is `rack.switchGain`**, before the rack's output gain: that gain
+  is the crossfader on a mix deck's bus, so a deck (cue its bus) is heard
+  before it is brought in. After the track's fader.
+- **A cued track that is muted or soloed out still plays, in the cue only.**
+  The transport fires it (`cuePlays(t)` beside the mute test) and
+  `rack.gate`, a gain between `switchGain` and `output`, shuts it out of the
+  mix, its sends and its meter. The band split of a deck bus hangs off the
+  gate too. A stopped clip or a stopped deck stays stopped.
+- **`syncCue(soloAudible)`** makes every tap and gate agree; signal.js calls
+  it from `refreshNoiseBeds` (which already runs after every mute, solo,
+  load and undo) and from `routeTrackOutput` for a cued track (a rebuilt
+  rack has a new tap point).
+- **`level` and `cue / mix`** (`cueGains`): the blend puts the mix into the
+  cue output too, from the cued tracks alone to the mix alone.
+- **This browser's, not the song's.** Which tracks are cued (`t._cue`) is
+  never saved, undone, recorded in a live set or shared in a jam; the mode,
+  pair, level and blend are remembered per browser (`seqbaby.cue.v1`).
+- cue.js is imported by signal.js and so can run before state.js: it keeps
+  its settings module-local and reads `state` only inside functions.
+- `window.seqbaby.cue` (`set`, `toggle`, `clear`, `state`).
+- Known limits: the metronome goes to outputs 1/2 (both ears in split mono);
+  no output device picker (the system's output is used); no cue button in
+  the clip view's rows.
 
 ## Macro pads (`macro.js`) — a Kaoss pad for the whole session
 
@@ -6562,7 +6612,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 101 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 102 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

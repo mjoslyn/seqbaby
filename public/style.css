@@ -3520,8 +3520,8 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   .sq-transport #macro-pads { order: 3; }
   /* fill, the mute scenes and master: a line of their own under the icons */
   .sq-transport .sq-perf { order: 4; flex: 1 1 auto; justify-content: space-between; }
-  .sq-transport #master-btn { order: 4; flex: 0 0 auto; }
-  .sq-transport .sq-perf #fill-btn, .sq-transport #master-btn { min-height: 40px; padding: 0 14px; }
+  .sq-transport #master-btn, .sq-transport #cue-btn { order: 4; flex: 0 0 auto; }
+  .sq-transport .sq-perf #fill-btn, .sq-transport #master-btn, .sq-transport #cue-btn { min-height: 40px; padding: 0 14px; }
   .sq-transport .sq-mute-scenes button { min-height: 40px; min-width: 40px; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
@@ -3774,6 +3774,7 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   .sq-track__head .sq-vol-combo { width: 52px; }
   .sq-track__head .sq-track__solo,
   .sq-track__head .sq-track__mute,
+  .sq-track__head .sq-track__cue,
   .sq-track__head .sq-track__plock { order: 10; flex: 1 1 0; min-width: 0; }
   /* The synth row and the generator buttons keep their places after it. Order
      is stated rather than left to DOM order because the vol field sits BEFORE
@@ -4026,6 +4027,7 @@ a.sq-modal__ok:active { transform: translateY(1px); }
      height. */
   .sq-track__head .sq-track__solo,
   .sq-track__head .sq-track__mute,
+  .sq-track__head .sq-track__cue,
   .sq-track__head .sq-track__plock {
     padding: 6px 8px;
     min-height: 44px;
@@ -4980,6 +4982,21 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 #fill-btn { touch-action: none; user-select: none; -webkit-user-select: none; }
 #fill-btn.is-on { background: var(--accent); border-color: var(--accent); color: #0b0d10; }
 #master-btn.is-on { color: var(--accent); border-color: var(--accent); }
+/* Cue (cue.js): the buttons only show while a cue output is switched on. */
+#cue-btn.is-on { color: #ffd166; border-color: #ffd166; }
+.sq-track__cue, .sq-mix__cue { display: none; }
+body.sq-cue-on .sq-track__cue, body.sq-cue-on .sq-mix__cue { display: inline-flex; align-items: center; justify-content: center; }
+.sq-track__cue[aria-pressed="true"], .sq-mix__cue[aria-pressed="true"] { background: #ffd166; color: #0b0d10; border-color: #ffd166; }
+.sq-cue__modal { max-width: 460px; }
+.sq-cue__hint, .sq-cue__dev { margin: 0 0 12px; font-size: 12px; color: var(--fg-dim); }
+.sq-cue__modes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.sq-cue__mode { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.sq-cue__mode:has(input:checked) { border-color: #ffd166; }
+.sq-cue__mode:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.sq-cue__mode span { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.sq-cue__mode i { font-style: normal; font-size: 11px; color: var(--fg-dim); }
+.sq-cue__row { display: flex; gap: 24px; justify-content: center; }
+.sq-cue__tools { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; font-size: 12px; color: var(--fg-dim); }
 .sq-mute-scenes { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .sq-mute-scenes__label { font-size: 11px; color: var(--fg-dim); padding: 0 6px; }
 .sq-mute-scenes button { border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 4px 8px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; opacity: 0.55; }

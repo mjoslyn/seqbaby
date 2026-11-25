@@ -32,6 +32,7 @@ import { loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejec
 import { state } from "./state.js";
 import { measureSet } from "./measure.js";
 import { captureStart, closeReplay, forkPoint, loadReplay, openFork, pauseReplay, playReplay, replayState, seekReplay, setRecordState, toggleSetRecord } from "./setRecorder.js";
+import { clearCues, cueConfig, setCue, toggleCue } from "./cue.js";
 import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 
 export function installAppApi() {
@@ -42,6 +43,9 @@ export function installAppApi() {
     // replay the set player (app/set/[id]) drives. `forkPoint` is where a
     // paused replay is, as a starting point; `openFork` opens the studio on
     // one, armed to record a new set from it.
+    // The cue (cue.js): this browser's headphone output. `set` takes any of
+    // {mode: "off" | "split" | "multi", pair, level, blend}; `toggle` cues a track.
+    cue: { set: setCue, toggle: toggleCue, clear: clearCues, state: () => ({ ...cueConfig() }) },
     sets: {
       toggle: toggleSetRecord,
       state: setRecordState,

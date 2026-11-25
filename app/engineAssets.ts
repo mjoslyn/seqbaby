@@ -101,6 +101,7 @@ export const ENGINE_MODULES = [
   "macro.js",
   "main.js",
   "master.js",
+  "cue.js",
   "measure.js",
   "meter.js",
   "meters.js",
