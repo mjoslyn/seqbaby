@@ -3307,6 +3307,21 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   border-color: var(--accent);
   font-weight: 600;
 }
+/* A link wearing the ok button (the set dialog's `open in the player`): a
+   link has none of a button's box, so it gets the same one here. */
+a.sq-modal__ok {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 7px 12px;
+  font: inherit; font-weight: 600;
+  line-height: normal;
+  text-decoration: none;
+  text-transform: lowercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+a.sq-modal__ok:active { transform: translateY(1px); }
 .sq-modal__ok:disabled,
 .sq-sound__preview:disabled,
 .sq-sound__regen:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -4367,7 +4382,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     padding: 14px 16px;
     gap: 8px;
   }
-  .sq-modal__actions button {
+  .sq-modal__actions button,
+  .sq-modal__actions a.sq-modal__ok {
     padding: 8px 12px;
     min-height: 36px;
   }
