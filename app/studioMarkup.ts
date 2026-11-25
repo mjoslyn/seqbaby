@@ -1384,48 +1384,67 @@ ${BREATH_PANEL}
         </div>
         <div class="sq-fx__row" data-fx="prism">
           <span class="sq-fx__title">prism</span>
-          <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>wet</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="sq-fx__ctl" title="how the four modules are wired. split: each one works on the input by itself, side by side, and what they did is added up. chain: each feeds the next (character, movement, diffusion, texture), so the echo repeats the fuzz and the tape wears all of it down"><span>route</span><select class="fx-prism-route">
-            <option value="split" selected>split</option>
-            <option value="chain">chain</option>
+          <div class="sq-prism">
+          <div class="sq-prism__top">
+            <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>wet</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+            <label class="sq-fx__ctl sq-prism__pick" title="how the four modules are wired. split: each one works on the input by itself, side by side, and what they did is added up. chain: each feeds the next (character, movement, diffusion, texture), so the echo repeats the fuzz and the tape wears all of it down"><span>modules run</span><select class="fx-prism-route">
+            <option value="split" selected>side by side</option>
+            <option value="chain">in a chain</option>
           </select></label>
-          <label class="sq-fx__ctl" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>char</span><select class="fx-prism-charmode">
+          </div>
+          <div class="sq-prism__mod" data-mod="char">
+            <span class="sq-prism__n" aria-hidden="true">1</span>
+            <label class="sq-fx__ctl sq-prism__pick" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>character</span><select class="fx-prism-charmode">
             <option value="drive" selected>drive</option>
             <option value="sweeten">sweeten</option>
             <option value="fuzz">fuzz</option>
             <option value="howl">howl</option>
             <option value="swell">swell</option>
           </select></label>
-          <label class="sq-fx__ctl" title="how much character: drive and fuzz gain, howl feedback, swell time. 0 takes the module out"><span>amt</span><input class="fx-prism-char" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
-          <label class="sq-fx__ctl" title="movement: doubler (a second player just behind), vibrato, phaser, tremolo (sine to square as it deepens), pitch (a harmony voice)"><span>move</span><select class="fx-prism-movemode">
+            <label class="sq-fx__ctl" title="how much character: drive and fuzz gain, howl feedback, swell time. 0 takes the module out"><span>amount</span><input class="fx-prism-char" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          </div>
+          <div class="sq-prism__mod" data-mod="move">
+            <span class="sq-prism__n" aria-hidden="true">2</span>
+            <label class="sq-fx__ctl sq-prism__pick" title="movement: doubler (a second player just behind), vibrato, phaser, tremolo (sine to square as it deepens), pitch (a harmony voice)"><span>movement</span><select class="fx-prism-movemode">
             <option value="doubler" selected>doubler</option>
             <option value="vibrato">vibrato</option>
             <option value="phaser">phaser</option>
             <option value="tremolo">tremolo</option>
             <option value="pitch">pitch</option>
           </select></label>
-          <label class="sq-fx__ctl" title="how much movement: its depth. On pitch, which interval: an octave down at the bottom through a fourth, a fifth, up to an octave up"><span>amt</span><input class="fx-prism-move" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
-          <label class="sq-fx__ctl" title="diffusion: cascade (ping-pong echoes that smear into a wash), reels (a tape echo), space (a reverb), collage (fragments of the last few seconds, some backwards), reverse (each slice played backwards)"><span>diff</span><select class="fx-prism-diffmode">
+            <label class="sq-fx__ctl" title="how much movement: its depth. On pitch, which interval: an octave down at the bottom through a fourth, a fifth, up to an octave up"><span>amount</span><input class="fx-prism-move" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+            <label class="sq-fx__ctl" title="the movement module's speed, 0.05 to 12Hz"><span>rate</span><input class="fx-prism-rate" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+          </div>
+          <div class="sq-prism__mod" data-mod="diff">
+            <span class="sq-prism__n" aria-hidden="true">3</span>
+            <label class="sq-fx__ctl sq-prism__pick" title="diffusion: cascade (ping-pong echoes that smear into a wash), reels (a tape echo), space (a reverb), collage (fragments of the last few seconds, some backwards), reverse (each slice played backwards)"><span>diffusion</span><select class="fx-prism-diffmode">
             <option value="cascade">cascade</option>
             <option value="reels">reels</option>
             <option value="space" selected>space</option>
             <option value="collage">collage</option>
             <option value="reverse">reverse</option>
           </select></label>
-          <label class="sq-fx__ctl" title="how much diffusion: its level and its feedback together"><span>amt</span><input class="fx-prism-diff" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
-          <label class="sq-fx__ctl" title="texture: filter (a resonant lowpass the playing opens), squash (a compressor), cassette (wow, flutter, saturation, hiss), broken (dropouts, stutters, lost bits), interference (a radio band with static)"><span>tex</span><select class="fx-prism-texmode">
+            <label class="sq-fx__ctl" title="how much diffusion: its level and its feedback together"><span>amount</span><input class="fx-prism-diff" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+            <label class="sq-fx__ctl" title="the diffusion module's time: echo spacing on cascade and reels, the tail on space, grain size on collage, slice length on reverse"><span>time</span><input class="fx-prism-time" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          </div>
+          <div class="sq-prism__mod" data-mod="tex">
+            <span class="sq-prism__n" aria-hidden="true">4</span>
+            <label class="sq-fx__ctl sq-prism__pick" title="texture: filter (a resonant lowpass the playing opens), squash (a compressor), cassette (wow, flutter, saturation, hiss), broken (dropouts, stutters, lost bits), interference (a radio band with static)"><span>texture</span><select class="fx-prism-texmode">
             <option value="filter">filter</option>
             <option value="squash">squash</option>
             <option value="cassette" selected>cassette</option>
             <option value="broken">broken</option>
             <option value="interference">interference</option>
           </select></label>
-          <label class="sq-fx__ctl" title="how much texture. 0 takes the module out"><span>amt</span><input class="fx-prism-tex" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
-          <label class="sq-fx__ctl" title="a see-saw eq on the way out: left darker, right brighter, flat in the middle"><span>tilt</span><input class="fx-prism-tilt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="sq-fx__ctl" title="the movement module's speed, 0.05 to 12Hz"><span>rate</span><input class="fx-prism-rate" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
-          <label class="sq-fx__ctl" title="the diffusion module's time: echo spacing on cascade and reels, the tail on space, grain size on collage, slice length on reverse"><span>time</span><input class="fx-prism-time" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
-          <label class="sq-fx__ctl" title="how readily the envelope-driven characters answer the playing: swell's trigger, the fuzz gate, howl, the texture filter"><span>sens</span><input class="fx-prism-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
+            <label class="sq-fx__ctl" title="how much texture. 0 takes the module out"><span>amount</span><input class="fx-prism-tex" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          </div>
+          <div class="sq-prism__all" title="these three reach across the modules">
+            <span class="sq-prism__cap">all</span>
+            <label class="sq-fx__ctl" title="a see-saw eq on the way out: left darker, right brighter, flat in the middle"><span>tilt</span><input class="fx-prism-tilt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+            <label class="sq-fx__ctl" title="how readily the envelope-driven characters answer the playing: swell's trigger, the fuzz gate, howl, the texture filter"><span>sens</span><input class="fx-prism-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+            <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
+          </div>
+          </div>
         </div>
         <div class="sq-fx__row" data-fx="pan">
           <span class="sq-fx__title">pan</span>

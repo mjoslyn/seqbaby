@@ -731,6 +731,13 @@ in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT 
   (`PRISM_KNOBS`) spells all three namespaces: `fx-prism-<k>`, `prism_<k>`,
   `fx.prism.<k>`. The mix is the rack's linear crossfade around the node
   (`prismWetBus`), like crush.
+- **The row is laid out as the console** (`.sq-prism`, studioMarkup.ts): the
+  mix and how the modules run on top, then a numbered, coloured line per
+  module (which character, its `amount`, and the one knob that is only its:
+  movement's `rate`, diffusion's `time`), then `all`: tilt, sens, drift. The
+  sign between two modules is the routing (`+` side by side, an arrow in a
+  chain, CSS `:has()` on the route select). The controls keep their classes,
+  so nothing that finds one by class changed, a copy (`prism#2`) included.
 - **Two routings** (`route`, the row's first select; `PRISM_ROUTES`, and
   `PRISM_SELECTS` is the four characters plus it). `split`, the default:
   every module works on the INPUT alone and what each did to it is added up

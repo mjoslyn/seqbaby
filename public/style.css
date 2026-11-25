@@ -1698,6 +1698,49 @@ main {
 .sq-fx__ctl .sq-knob { --knob-size: 38px; }
 .sq-fx__sync-wrap { gap: 4px; }
 
+/* The prism: four modules, each a line of its own (which one, how much, and
+   the one knob that is only its: movement's rate, diffusion's time), under
+   the mix and how they are wired, over the three knobs that reach across all
+   of them. The sign between two modules says the wiring: + side by side, an
+   arrow in a chain. */
+.sq-prism { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; min-width: 0; }
+.sq-prism__top, .sq-prism__mod, .sq-prism__all { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap; }
+.sq-prism__mod {
+  position: relative;
+  padding: 5px 8px 5px 10px;
+  border-left: 3px solid var(--prism-c, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--prism-c, var(--border)) 9%, transparent);
+}
+.sq-prism__mod[data-mod="char"] { --prism-c: #ff8a7a; }
+.sq-prism__mod[data-mod="move"] { --prism-c: #9fd7ff; }
+.sq-prism__mod[data-mod="diff"] { --prism-c: #b69cff; }
+.sq-prism__mod[data-mod="tex"]  { --prism-c: #d9c07a; }
+.sq-prism__n {
+  align-self: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #111; background: var(--prism-c);
+}
+.sq-prism__mod + .sq-prism__mod::before {
+  content: "+";
+  position: absolute; top: -12px; left: 10px;
+  font-size: 11px; line-height: 12px; color: var(--fg-dim);
+}
+.sq-prism:has(.sq-prism__top select option[value="chain"]:checked) .sq-prism__mod + .sq-prism__mod::before { content: "\2193"; }
+.sq-fx__ctl.sq-prism__pick { flex-direction: column; align-items: flex-start; gap: 3px; }
+.sq-prism__mod .sq-prism__pick > span { color: var(--prism-c); letter-spacing: 0.06em; }
+.sq-prism__mod .sq-prism__pick select { width: 132px; }
+.sq-prism__all { padding: 4px 8px 0 10px; border-top: 1px dashed var(--border); }
+.sq-prism__cap { align-self: center; font-size: 10px; letter-spacing: 0.08em; color: var(--fg-dim); min-width: 16px; }
+@media (max-width: 768px) {
+  /* the name on a line of its own, so a module and its knobs fit on one */
+  .sq-fx__row[data-fx="prism"] > .sq-fx__title { flex: 0 0 100%; }
+  .sq-prism__mod { flex-wrap: nowrap; gap: 8px; }
+  .sq-prism__mod .sq-fx__ctl.sq-prism__pick { flex: 1 1 90px; min-width: 0; }
+  .sq-prism__mod .sq-prism__pick select { width: 100%; }
+}
+
 .sq-lfo__row {
   display: grid;
   grid-template-columns: 52px 52px 96px 62px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 28px;
