@@ -27,6 +27,8 @@ export type SongListItem = {
   preview?: unknown;
   /** Genres and anything else the owner tagged it (lib/songTags.js). */
   tags: string[];
+  /** The tempo it was saved at (the `bpm` column), for lists that show it. */
+  bpm?: number | null;
 };
 
 /** A node of a song's version tree. Never carries `data` -- the list is drawn
@@ -126,10 +128,10 @@ export async function listSongs(): Promise<{ songs: SongListItem[]; error?: stri
  * title and who made them. Never `data`: one is loaded (`loadSong`, which
  * reads any public song) only when it is picked. Empty when the feed is.
  */
-export async function listPublicSongs(): Promise<{ id: string; title: string; by: string | null; bpm: number | null }[]> {
+export async function listPublicSongs(): Promise<{ id: string; title: string; by: string | null; bpm: number | null; tags: string[] }[]> {
   try {
     const { songs: list } = await loadExplore();
-    return list.slice(0, 300).map((s) => ({ id: s.id, title: s.title, by: s.owner?.handle || s.owner?.name || null, bpm: s.bpm }));
+    return list.slice(0, 300).map((s) => ({ id: s.id, title: s.title, by: s.owner?.handle || s.owner?.name || null, bpm: s.bpm, tags: s.tags || [] }));
   } catch {
     return [];
   }

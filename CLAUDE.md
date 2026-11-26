@@ -3326,8 +3326,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   loads too. Signed in: the account's songs, then everybody's published ones (`listPublicSongs`,
   the explorer's cached feed, never `data`; `loadSong` reads any public
   song). The picker says `looking for songs…` while it waits, shows why and
-  offers `try again` when the list fails or takes over 20s, and searches
-  titles and who made them; the picker also lists this browser's saved sessions, and
+  offers `try again` when the list fails or takes over 20s, shows each
+  song's tempo and tags (the `bpm` and `tags` columns: `listSongs` now
+  carries `bpm`, `listPublicSongs` `tags`) and searches titles, who made
+  them, tags and tempo; the picker also lists this browser's saved sessions, and
   takes a file or a pasted `?s=` / `?open=` link. On `seqbaby:mixlanded` the
   shell moves the open-song slot: onto the landed song when it is the
   account's own (a save is its next version), else to nothing (a save asks
@@ -3407,13 +3409,16 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   the selected track's card is the split's bottom pane drawn as a sheet from
   the bottom (`has-inst`), its top edge the split's own handle, so it is
   resized by the same drag (viewSplit.js's `topPx` reads the fraction there,
-  since the top pane's height is no longer the handle's place). The mix
-  bar's `instrument` toggles it, selecting a strip opens it, its × closes
+  since the top pane's height is no longer the handle's place). The
+  footer drawer's `instrument` toggles it, selecting a strip opens it, its × closes
   it. The master fx bus's block is a sheet at the right
   (`.sq-mix__master`, absolute in the section, so it stays put while the
-  desk scrolls): the bar's `master fx` makes the bus the first time and
+  desk scrolls): the footer's `master fx` makes the bus the first time and
   shows / hides the sheet after that (the bus stays in the path hidden; the
   strip's × takes it off).
+  The toggles live in a FOOTER DRAWER (`.sq-mix__foot`, made once in
+  `installMixView`, repainted by `render`): a bar pinned under the desk and
+  over both sheets, with `instrument`, `master fx` and `+ load a deck…`.
 - A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
   jam: peers get the landed or kept session.
 - `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `masterFx`, `masterFxOff`, `play`, `scene`,

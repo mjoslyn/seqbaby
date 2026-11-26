@@ -48,6 +48,7 @@ import { onViewChange } from "./views.js";
 
 let root = null;
 let desk = null;      // the rebuilt half
+let foot = null;      // the footer drawer: the sheets' toggles, and load a deck
 let detail = null;    // the selected strip's own track card
 let raf = 0;
 let holding = false;  // a control in the desk is held: no rebuild under the pointer
@@ -134,6 +135,11 @@ export function installMixView() {
   shut.setAttribute("aria-label", "close the instrument sheet");
   shut.textContent = "×";
   panes.bottom.appendChild(shut);
+  foot = document.createElement("div");
+  foot.className = "sq-mix__foot";
+  foot.setAttribute("role", "toolbar");
+  foot.setAttribute("aria-label", "mix sheets and decks");
+  root.appendChild(foot);
   detail = makeTrackDetail(panes.bottom, scheduleMixPaint, { buses: true, clips: true });
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
@@ -452,8 +458,6 @@ function bar() {
   const m = deskMix();
   if (!m) {
     return `<div class="sq-mix__bar">
-      <button type="button" data-act="load" title="load another song onto a deck, to mix it with this one or move over to it">load a deck…</button>
-      ${masterBtn()}
       <span class="sq-mix__hint">a fader, a pan, mute and solo per track. Select a strip to edit that track below.</span>
     </div>`;
   }
@@ -484,7 +488,6 @@ function bar() {
     ${tempo}
     ${xfadeRow()}
     <span class="sq-mix__grow"></span>
-    ${masterBtn()}
     <button type="button" data-act="keep" ${busy ? "disabled" : ""} title="keep every deck as one song: each deck becomes a bus, with the crossfader's balance in its fader">keep ${n === 2 ? "both" : `all ${n}`}</button>
   </div>`;
 }
@@ -606,6 +609,8 @@ function render() {
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
   const mb = masterBus();
+  // the footer drawer: the two sheets' toggles and the way to another deck
+  if (foot) foot.innerHTML = `${masterBtn()}<span class="sq-mix__grow"></span><button type="button" data-act="load" title="load another song onto a new deck, to mix it with this one or move over to it">+ load a deck…</button>`;
   desk.innerHTML = `${bar()}<div class="sq-mix__body${mb && sheets.master ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb && sheets.master ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : `<div class="sq-mix__strip is-feedhost" data-track-id="${mb.id}"><div class="sq-mix__tone is-feed">${feedKnob(mb, "the song")}</div></div>`}${strip(mb, shown)}</div>` : ""}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
@@ -895,7 +900,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
   let remote = mixSource()?.list ? "loading" : "none";
   let remoteError = "";
   const local = loadSetsMap();
-  for (const name of Object.keys(local)) entries.push({ kind: "local", id: name, title: name, note: "this browser" });
+  for (const name of Object.keys(local)) entries.push({ kind: "local", id: name, title: name, note: "this browser", bpm: Number(local[name]?.bpm) || null, tags: [] });
   const draw = () => {
     const q = input.value.trim().toLowerCase();
     const link = readLink(input.value);
@@ -903,8 +908,15 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
       list.innerHTML = `<button type="button" class="sq-mix__pick" data-link="1"><b>${link.slug ? "the shared song" : "the song"} this link names</b><span>press enter to load it</span></button>`;
       return;
     }
-    const hits = entries.filter((x) => !q || x.title.toLowerCase().includes(q) || x.note.toLowerCase().includes(q));
-    const rows = hits.map((x) => `<button type="button" class="sq-mix__pick" data-i="${entries.indexOf(x)}"><b>${esc(x.title)}</b><span>${esc(x.note)}</span></button>`).join("");
+    // a search reads the title, who made it, its tags and its tempo ("148")
+    const hay = (x) => `${x.title} ${x.note} ${(x.tags || []).join(" ")} ${x.bpm ? `${Math.round(x.bpm)} bpm` : ""}`.toLowerCase();
+    const hits = entries.filter((x) => !q || hay(x).includes(q));
+    const rows = hits.map((x) => `<button type="button" class="sq-mix__pick" data-i="${entries.indexOf(x)}">
+        <b>${esc(x.title)}</b>
+        <span class="sq-mix__pick-bpm">${x.bpm ? `${Math.round(x.bpm)} bpm` : ""}</span>
+        <span class="sq-mix__pick-tags">${(x.tags || []).slice(0, 3).map((g) => `<i>${esc(g)}</i>`).join("")}</span>
+        <span class="sq-mix__pick-note">${esc(x.note)}</span>
+      </button>`).join("");
     const note = remote === "loading" ? `<div class="sq-mix__hint">looking for songs…</div>`
       : remote === "failed" ? `<div class="sq-mix__hint is-error">${esc(remoteError)} <button type="button" class="sq-btn--ghost" data-pick="retry">try again</button></div>`
       : hits.length ? ""
@@ -921,7 +933,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
     // a list that never answers is a failure too, not a spinner for ever
     const slow = new Promise((_, no) => setTimeout(() => no(new Error("the song list is taking too long")), 20000));
     Promise.race([src.list(), slow]).then((songs) => {
-      const got = (songs || []).map((s) => ({ kind: "account", id: String(s.id), title: s.title || "untitled", note: s.note || "your songs" }));
+      const got = (songs || []).map((s) => ({ kind: "account", id: String(s.id), title: s.title || "untitled", note: s.note || "your songs", bpm: Number(s.bpm) || null, tags: Array.isArray(s.tags) ? s.tags : [] }));
       entries = [...got, ...locals];
       remote = "ready";
     }).catch((err) => {

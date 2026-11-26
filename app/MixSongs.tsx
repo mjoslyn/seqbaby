@@ -39,11 +39,15 @@ export default function MixSongs({ signedIn = false }: { signedIn?: boolean }) {
             id: s.id,
             title: s.title,
             note: s.is_template ? "yours · template" : s.is_public ? "yours · public" : "yours",
+            bpm: s.bpm ?? null,
+            tags: s.tags || [],
           })),
           ...(pub.status === "fulfilled" ? pub.value : []).filter((s) => !seen.has(s.id)).map((s) => ({
             id: s.id,
             title: s.title,
-            note: [s.by ? `by ${s.by}` : "published", s.bpm ? `${s.bpm} bpm` : ""].filter(Boolean).join(" · "),
+            note: s.by ? `by ${s.by}` : "published",
+            bpm: s.bpm ?? null,
+            tags: s.tags || [],
           })),
         ];
       },
