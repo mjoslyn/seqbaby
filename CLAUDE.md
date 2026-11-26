@@ -3401,6 +3401,19 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   (`restoreMaster`). A set recorded before this has no `master` keys: its
   start takes the bus off, and its perf leaves it alone. A deck bus's own
   LFO and lane settings are still not in a set (its knobs are, as `ctl`).
+- **The instrument and the master fx bus are sheets over the desk**
+  (`sheets`, mixView.js, `seqbaby.mixSheets.v1` per browser). The desk has
+  the whole view (`#mix.is-overlay`: the split's top pane is full height);
+  the selected track's card is the split's bottom pane drawn as a sheet from
+  the bottom (`has-inst`), its top edge the split's own handle, so it is
+  resized by the same drag (viewSplit.js's `topPx` reads the fraction there,
+  since the top pane's height is no longer the handle's place). The mix
+  bar's `instrument` toggles it, selecting a strip opens it, its × closes
+  it. The master fx bus's block is a sheet at the right
+  (`.sq-mix__master`, absolute in the section, so it stays put while the
+  desk scrolls): the bar's `master fx` makes the bus the first time and
+  shows / hides the sheet after that (the bus stays in the path hidden; the
+  strip's × takes it off).
 - A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
   jam: peers get the landed or kept session.
 - `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `masterFx`, `masterFxOff`, `play`, `scene`,

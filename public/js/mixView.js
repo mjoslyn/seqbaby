@@ -103,6 +103,20 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
 const isOpen = () => state.view === "mix" && !!root;
 
+// The two sheets over the desk: the selected track's card (`inst`, from the
+// bottom, where the split's lower pane was) and the master fx bus's strip
+// (`master`, at the right). Each is toggled from the mix bar and remembered
+// per browser; the desk under them has the whole view.
+const SHEETS_KEY = "seqbaby.mixSheets.v1";
+const sheets = { inst: false, master: true };
+try { Object.assign(sheets, JSON.parse(localStorage.getItem(SHEETS_KEY) || "{}") || {}); } catch {}
+function setSheet(k, on) {
+  sheets[k] = !!on;
+  try { localStorage.setItem(SHEETS_KEY, JSON.stringify({ inst: !!sheets.inst, master: !!sheets.master })); } catch {}
+  root?.classList.toggle("has-inst", !!sheets.inst);
+  scheduleMixPaint();
+}
+
 export function installMixView() {
   root = document.getElementById("mix");
   if (!root) return;
@@ -110,6 +124,16 @@ export function installMixView() {
   desk = document.createElement("div");
   desk.className = "sq-mix__desk";
   panes.top.appendChild(desk);
+  root.classList.add("is-overlay");
+  root.classList.toggle("has-inst", !!sheets.inst);
+  const shut = document.createElement("button");
+  shut.type = "button";
+  shut.className = "sq-mix__sheet-x sq-btn--ghost";
+  shut.dataset.act = "sheet-inst";
+  shut.title = "close this sheet (the mix bar's instrument button opens it again)";
+  shut.setAttribute("aria-label", "close the instrument sheet");
+  shut.textContent = "×";
+  panes.bottom.appendChild(shut);
   detail = makeTrackDetail(panes.bottom, scheduleMixPaint, { buses: true, clips: true });
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
@@ -419,8 +443,8 @@ function otherDecks(shown) {
 /** The bar's way to the master fx bus: adds it, or selects the one there. */
 function masterBtn() {
   const on = !!masterBus();
-  return `<button type="button" class="sq-mix__masterbtn" data-act="master-fx" aria-pressed="${on}" title="${on
-    ? "the master fx bus: select it to open its filter, eq, rack, mod and lanes below"
+  return `<button type="button" class="sq-mix__sheetbtn" data-act="sheet-inst" aria-pressed="${!!sheets.inst}" title="the selected track's card (its instrument, fx, mod and steps) as a sheet over the desk: show or hide it. Selecting a strip opens it">instrument</button><button type="button" class="sq-mix__masterbtn${on ? " is-on" : ""}" data-act="master-fx" aria-pressed="${on && !!sheets.master}" title="${on
+    ? "the master fx bus: show or hide its sheet at the right of the desk (the bus stays in the path either way; its × takes it off)"
     : "add a master fx bus: one bus every track and every deck goes through on the way out, with its own filter, eq, fx rack, mod matrix and lanes. It is this desk's, not the song's: it is not saved, and it stays when you land or open another song"}">master fx</button>`;
 }
 
@@ -582,7 +606,7 @@ function render() {
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
   const mb = masterBus();
-  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : `<div class="sq-mix__strip is-feedhost" data-track-id="${mb.id}"><div class="sq-mix__tone is-feed">${feedKnob(mb, "the song")}</div></div>`}${strip(mb, shown)}</div>` : ""}</div>`;
+  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb && sheets.master ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb && sheets.master ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : `<div class="sq-mix__strip is-feedhost" data-track-id="${mb.id}"><div class="sq-mix__tone is-feed">${feedKnob(mb, "the song")}</div></div>`}${strip(mb, shown)}</div>` : ""}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
@@ -783,7 +807,13 @@ async function onClick(e) {
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }
-  if (act === "master-fx") { const mb = addMasterBus(); scheduleMixPaint(); if (mb) detail.select(mb); return; }
+  if (act === "master-fx") {
+    // no bus yet: make one and show it; else the button shows / hides its sheet
+    if (!masterBus()) { addMasterBus(); setSheet("master", true); }
+    else setSheet("master", !sheets.master);
+    return;
+  }
+  if (act === "sheet-inst") { setSheet("inst", !sheets.inst); return; }
   if (act === "master-off") { removeMasterBus(); scheduleMixPaint(); return; }
   const el = e.target.closest(".sq-mix__strip");
   const t = el && trackById(el.dataset.trackId);
@@ -803,7 +833,7 @@ async function onClick(e) {
     scheduleMixPaint();
     return;
   }
-  if (act === "select") detail.select(t);
+  if (act === "select") { detail.select(t); if (!sheets.inst) setSheet("inst", true); }
 }
 
 // ---- the picker: a song for a new deck ------------------------------------------------

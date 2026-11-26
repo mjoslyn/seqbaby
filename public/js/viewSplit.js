@@ -117,13 +117,17 @@ export function makeViewSplit(section, view) {
     apply();
   }
   function commit() { saved[view] = frac; save(); }
+  // Where the handle is, in pixels. As an overlay (the mix view: the bottom
+  // pane is a sheet over a full-height top pane) the top pane's own height
+  // is the whole section, so it is read off the fraction instead.
+  const topPx = () => section.classList.contains("is-overlay") ? frac * room() : top.getBoundingClientRect().height;
 
   handle.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     handle.setPointerCapture(e.pointerId);
     const y0 = e.clientY;
-    const h0 = top.getBoundingClientRect().height;
+    const h0 = topPx();
     section.classList.add("is-resizing");
     const move = (ev) => setTopPx(h0 + ev.clientY - y0);
     const up = () => {
@@ -142,7 +146,7 @@ export function makeViewSplit(section, view) {
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     e.preventDefault();
     const step = e.shiftKey ? 80 : 20;
-    setTopPx(top.getBoundingClientRect().height + (e.key === "ArrowUp" ? -step : step));
+    setTopPx(topPx() + (e.key === "ArrowUp" ? -step : step));
     commit();
   });
 

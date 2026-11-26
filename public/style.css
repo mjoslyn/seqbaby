@@ -4783,17 +4783,29 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-track.is-master-bus .sq-track__engine-btn, .sq-track.is-master-bus .sq-track__out-field,
 .sq-track.is-master-bus .sq-track__sends, .sq-track.is-master-bus .sq-track__bus-in,
 .sq-track.is-master-bus .sq-track__solo { display: none !important; }
-.sq-mix__body.has-master { display: flex; gap: 10px; align-items: flex-start; }
-.sq-mix__body.has-master > .sq-mix__decks { flex: 1 1 auto; min-width: 0; }
-.sq-mix__master { flex: 0 0 auto; display: grid; gap: 6px; justify-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px;
-  background: color-mix(in oklab, var(--fg) 3%, transparent); }
+/* The mix view's two sheets (mixView.js): the desk has the whole view, the
+   selected track's card is a sheet from the bottom (the split's lower pane,
+   its handle the sheet's top edge) and the master fx bus one at the right.
+   Both lie over the desk and are toggled from the mix bar. */
+.sq-mix.is-overlay:not([hidden]) { position: relative; }
+.sq-mix.is-overlay > .sq-split__top { flex: 1 1 auto; }
+.sq-mix.is-overlay > .sq-split__handle, .sq-mix.is-overlay > .sq-split__bottom { display: none; }
+.sq-mix.is-overlay.has-inst > .sq-split__handle { display: block; position: absolute; left: 0; right: 0; top: var(--split-top, 58%); height: 14px; margin: 0;
+  z-index: 41; background: var(--bg); border-top: 1px solid var(--border); border-radius: 10px 10px 0 0; box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.45); }
+.sq-mix.is-overlay.has-inst > .sq-split__handle::before { display: none; }
+.sq-mix.is-overlay.has-inst > .sq-split__bottom { display: block; position: absolute; left: 0; right: 0; top: calc(var(--split-top, 58%) + 14px); bottom: 0;
+  z-index: 40; background: var(--bg); padding: 0 16px 12px; }
+.sq-mix__sheet-x { position: sticky; top: 0; float: right; z-index: 2; padding: 2px 9px; font-size: 14px; line-height: 1.2; }
+.sq-mix__master { position: absolute; right: 16px; top: 52px; z-index: 45; display: grid; gap: 6px; justify-items: center; padding: 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: -8px 10px 24px rgba(0, 0, 0, 0.45); }
 .sq-mix__master > b { font-size: 11px; letter-spacing: 0.08em; color: var(--fg-dim); }
 .sq-mix__strip.is-master { border-top-color: var(--fg); background: color-mix(in oklab, var(--fg) 6%, var(--bg)); }
 .sq-mix__tone.is-feed { min-height: 0; }
 .sq-mix__strip.is-feedhost { border: 0; background: none; padding: 0; flex: 0 0 auto; min-height: 0; }
 .sq-mix__tone.is-feed:empty { display: none; }
 .sq-mix__feed span { color: var(--fg); }
-.sq-mix__masterbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.sq-mix__masterbtn[aria-pressed="true"], .sq-mix__sheetbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.sq-mix__masterbtn.is-on:not([aria-pressed="true"]) { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
 /* the "off the scene" badge means the pattern bar's scene, which is not a deck B track's */
 .sq-track.is-deck-b .sq-track__slot, .sq-track.is-deck-bus .sq-track__slot { display: none !important; }
 /* a deck's bus is the deck: it is not removed, copied, sent anywhere or re-engined by hand */
