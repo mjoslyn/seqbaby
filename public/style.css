@@ -914,6 +914,9 @@ main {
 .sq-track__bus-in[hidden] { display: none; }
 .sq-track__out-field[hidden] { display: none !important; }
 /* A track's sends: a small knob per fx bus (signal.js, paintSendKnobs). */
+/* The volume row: vol, out and the sends as one unit of the head, so a narrow
+   window wraps them together rather than leaving vol on a line alone. */
+.sq-track__volrow { display: inline-flex; gap: 10px; align-items: center; flex-wrap: nowrap; }
 .sq-track__sends { display: inline-flex; gap: 8px; align-items: flex-end; }
 .sq-track__sends[hidden] { display: none !important; }
 .sq-track__sends .sq-send { --knob-size: 26px; }
@@ -3770,6 +3773,9 @@ a.sq-modal__ok:active { transform: translateY(1px); }
      The meter narrows to the knob's column; it reads a level, not a number. */
   /* The sends (a knob per fx bus, only once a bus exists) take a line of their
      own under the vol row: beside `out` they squeezed the name to two letters. */
+  /* On a phone the volume row's children are placed by the head's own
+     orders, as they were when they were its children. */
+  .sq-track__head .sq-track__volrow { display: contents; }
   .sq-track__head .sq-track__sends { order: 19; flex: 0 0 100%; justify-content: flex-start; gap: 14px; }
   .sq-track__head .sq-track__sends .sq-send { flex-direction: row; align-items: center; gap: 6px; }
   .sq-track__head .sq-track__sends .sq-send label { max-width: 14ch; font-size: 11px; }

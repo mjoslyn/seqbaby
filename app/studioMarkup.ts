@@ -843,18 +843,21 @@ export const STUDIO_BODY = String.raw`
             <option value="16">16</option>
           </select>
         </div>
-        <div class="sq-field sq-track__out-field" hidden><label>out</label>
-          <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus and its filter, effects, mod matrix and automation lanes act on all of them at once"><option value="master">master</option></select>
-        </div>
-        <!-- Sends (signal.js): a knob per fx bus this track could also feed,
-             beside where its output goes. Filled by refreshOutputSelects. -->
-        <div class="sq-track__sends" hidden></div>
         <span class="sq-track__bus-in" hidden></span>
-        <div class="sq-field sq-vol__field"><label>vol</label>
-          <div class="sq-vol-combo" title="volume (drag) + output level">
-            <div class="sq-meter sq-track__meter"><div class="sq-meter__bar"></div></div>
-            <input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" />
+        <!-- The volume row: vol, where the output goes, and the sends
+             (signal.js: a knob per fx bus this track could also feed, filled
+             by refreshOutputSelects). One unit, so they wrap together. -->
+        <div class="sq-track__volrow">
+          <div class="sq-field sq-vol__field"><label>vol</label>
+            <div class="sq-vol-combo" title="volume (drag) + output level">
+              <div class="sq-meter sq-track__meter"><div class="sq-meter__bar"></div></div>
+              <input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" />
+            </div>
           </div>
+          <div class="sq-field sq-track__out-field" hidden><label>out</label>
+            <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus and its filter, effects, mod matrix and automation lanes act on all of them at once"><option value="master">master</option></select>
+          </div>
+          <div class="sq-track__sends" hidden></div>
         </div>
         <div class="sq-track__synth-row">
         <div class="sq-param-group sq-param-group--timbre">

@@ -3976,7 +3976,8 @@ three amounts into one tank, dry signals untouched.
 - **Outside p-lock**, like `out`. **Not a mod target**: a send amount takes no
   LFO, lane or pad yet (a reverb throw is still a lane on the bus's own wet).
 - UI: a small knob per bus a track could send to, in `.sq-track__sends`
-  beside the `out` select, built by `paintSendKnobs` from
+  beside the `out` select (both after vol in `.sq-track__volrow`, one unit
+  of the head so the three wrap together; `display: contents` on a phone), built by `paintSendKnobs` from
   `refreshOutputSelects` (which also prunes a send whose bus has gone). The
   row is rebuilt only when the list of buses or a name moved, since that
   function runs after every merge and a knob under the pointer must not be
