@@ -3982,7 +3982,8 @@ three amounts into one tank, dry signals untouched.
   row is rebuilt only when the list of buses or a name moved, since that
   function runs after every merge and a knob under the pointer must not be
   replaced. Not offered for the bus the track's whole output is already on.
-  On a phone the row takes a line of its own under vol. The bus's `◂` line
+  On a phone the knobs are not in the head: they are in the track's "more"
+  menu, in its routing section beside `out` (`openTrackMenu`). The bus's `◂` line
   lists senders with their amounts.
 - Builder: `setSend(song, track, bus, amount)` (MCP `set_send`),
   `summarizeTrack().sends`, `validate` counting a send as something reaching

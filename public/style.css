@@ -3771,14 +3771,16 @@ a.sq-modal__ok:active { transform: translateY(1px); }
      own underneath. Given a fixed column it keeps its size and solo / mute /
      p-lock come up beside it, which is one row per track less to scroll past.
      The meter narrows to the knob's column; it reads a level, not a number. */
-  /* The sends (a knob per fx bus, only once a bus exists) take a line of their
-     own under the vol row: beside `out` they squeezed the name to two letters. */
-  /* On a phone the volume row's children are placed by the head's own
-     orders, as they were when they were its children. */
+  /* The sends (a knob per fx bus, only once a bus exists) are behind the
+     "more" button on a phone, in the track menu's routing section with `out`
+     (openTrackMenu): in the head they took a line of their own per track. */
+  /* The volume row's children are placed by the head's own orders, as they
+     were when they were its children. */
   .sq-track__head .sq-track__volrow { display: contents; }
-  .sq-track__head .sq-track__sends { order: 19; flex: 0 0 100%; justify-content: flex-start; gap: 14px; }
-  .sq-track__head .sq-track__sends .sq-send { flex-direction: row; align-items: center; gap: 6px; }
-  .sq-track__head .sq-track__sends .sq-send label { max-width: 14ch; font-size: 11px; }
+  .sq-track__head .sq-track__sends { display: none; }
+  .sq-track__menu-modal .sq-track__sends { gap: 14px; flex-wrap: wrap; }
+  .sq-track__menu-modal .sq-track__sends .sq-knob { --knob-size: 44px; }
+  .sq-track__menu-modal .sq-track__sends .sq-send label { max-width: 14ch; font-size: 11px; }
   .sq-track__head .sq-vol__field { flex: 0 0 auto; order: 10; }
   .sq-track__head .sq-vol-combo { width: 52px; }
   .sq-track__head .sq-track__solo,

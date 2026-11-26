@@ -1090,10 +1090,18 @@ export function openTrackMenu(t) {
   // The send. Hidden in the head while there is no bus to send to, and the
   // menu keeps that — an empty "routing" section would say nothing.
   const outField = head.querySelector(".sq-track__out-field");
-  if (outField && !outField.hidden) {
-    captured.push({ node: outField, parent: outField.parentNode, nextSibling: outField.nextSibling });
+  // The send knobs come with it: on a phone they are only here, since in the
+  // head they took a line of their own on every track.
+  const sendsBox = head.querySelector(".sq-track__sends");
+  const hasOut = outField && !outField.hidden;
+  const hasSends = sendsBox && !sendsBox.hidden;
+  if (hasOut || hasSends) {
     addLabel("routing");
-    modal.appendChild(outField);
+    for (const n of [hasOut && outField, hasSends && sendsBox]) {
+      if (!n) continue;
+      captured.push({ node: n, parent: n.parentNode, nextSibling: n.nextSibling });
+    }
+    addRow([hasOut && outField, hasSends && sendsBox]);
   }
 
   const saveBtn = capture(head, ".sq-track__save");
