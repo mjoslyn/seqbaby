@@ -3221,14 +3221,17 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   callers. The decks the fade started carry `armFade` and come in on the bar
   line the fade begins on, not on their own start line. Deck A in arrange
   mode has no pattern to wait for and ignores the target.
-- **`auto` in the fade's pattern select** (`autoFade`, mixView.js): out over
+- **`auto: playing` / `auto: queued` in the fade's pattern select**
+  (`autoFade(side, match)`, mixView.js; values `auto` / `autoq`): out over
   the playing deck's LAST filled pattern, in on the FIRST of the decks
-  coming in. The fade begins where that last pattern starts, lasts as long
-  as it does (the bars its chain plays it for, or its own length in bars
-  when longer), and each deck on the side faded to that is not playing yet
-  is put on its first filled pattern before it is started. The bar and
-  length selects are greyed while it is picked. It is `fadeToDeck` with a
-  slot and a computed length, so everything above still holds.
+  coming in. The fade begins where that last pattern starts, and each deck
+  on the side faded to that is not playing yet is put on its first filled
+  pattern before it is started. The length is a pattern's bars
+  (`patternBars`: the bars its chain plays it for, or its own length when
+  longer): the playing deck's last pattern's for `playing`, the first
+  incoming deck's first pattern's for `queued`. The bar and length selects
+  are greyed while either is picked. It is `fadeToDeck` with a slot and a
+  computed length, so everything above still holds.
 - **The crossfader has six shapes** (`XFADE_CURVES` / `XFADE_CURVE_TIPS`,
   mixPlan.js, the select after the arrows): `blend` (equal power), `smooth`
   (equal power over an eased travel), `linear`, `full` (each side full on its
