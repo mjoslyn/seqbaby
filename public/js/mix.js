@@ -58,8 +58,8 @@ import { applyBusMute, placeBusesLast, setActiveTrack } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback, resolveSends } from "./signal.js";
-import { aliasPattern, inSong, nextChainPattern, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { applyCompressorConfig, mixOutNode, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback, resolveSends } from "./signal.js";
+import { aliasPattern, inSong, masterBusTrack, nextChainPattern, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, quantizeToScale } from "./theory.js";
 import { nameToMidi } from "./theoryData.js";
@@ -163,6 +163,58 @@ function announce() {
 let source = null;
 export function setMixSource(backend) { source = backend && typeof backend.load === "function" ? backend : null; }
 export function mixSource() { return source; }
+
+// ---- the master fx bus -------------------------------------------------------------
+//
+// One bus everything goes through on the way to the master: every track of
+// the song, and every deck's bus while a mix is loaded. A real `bus` track,
+// flagged `_masterBus`, so it has a fader, filter, eq, rack, mod matrix and
+// lanes with no code of its own (signal.js reads "master" as its input:
+// `mixOutNode`). It is the DESK's, not the song's: never saved, undone or
+// shared in a jam, it stays through a landing, an eject and another song being
+// opened (session.js leaves it standing), and a reload starts without one.
+
+/** The master fx bus, or null. */
+export function masterBus() { return masterBusTrack(); }
+
+/** The landing gain (landDeckB) follows where "master" now is. */
+function repointLand() {
+  const g = state._landGain, to = mixOutNode();
+  if (!g || !to) return;
+  try { g.disconnect(); } catch {}
+  try { g.connect(to); } catch {}
+}
+
+/** Put a master fx bus on the desk (or hand back the one there). */
+export function addMasterBus() {
+  let t = masterBusTrack();
+  if (t) return t;
+  t = createTrack({ name: "master fx", engineKey: "bus", length: 16, params: { vol: 1 } });
+  t._masterBus = true;
+  t.el?.classList.add("is-master-bus");
+  const vol = trackControl(t, ".p-vol");
+  if (vol) vol.value = "1";
+  placeBusesLast();
+  repointLand();
+  // an empty bus at unity is the same signal by another path: a swap, no duck
+  if (state.ready) refreshAllTrackOutputs({ swap: true });
+  refreshOutputSelects();
+  refreshCompSourceDropdowns();
+  announce();
+  return t;
+}
+
+/** Take the master fx bus off: everything goes straight to the master again. */
+export function removeMasterBus() {
+  const t = masterBusTrack();
+  if (!t) return false;
+  t._leaving = true;                               // no longer where "master" is
+  repointLand();
+  if (state.ready) refreshAllTrackOutputs();       // under each rack's fade: its effects go with it
+  setTimeout(() => { try { removeTrack(t); } catch {} announce(); }, 80);
+  announce();
+  return true;
+}
 
 // ---- loading a deck -------------------------------------------------------------
 
@@ -1393,8 +1445,8 @@ export function ejectDeckTrack(t) {
  * jam see it, as they see any reorder.
  */
 export function moveTrack(t, before = null) {
-  if (!t || t._deckBus || state.mix?.landing) return false;
-  const same = (x) => x !== t && !x._deckBus && (x._deck || null) === (t._deck || null)
+  if (!t || t._deckBus || t._masterBus || state.mix?.landing) return false;
+  const same = (x) => x !== t && !x._deckBus && !x._masterBus && (x._deck || null) === (t._deck || null)
     && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving;
   if (before && (before === t || !same(before))) return false;
   const rest = state.tracks.filter(x => x !== t);
@@ -1620,7 +1672,7 @@ function landDeckBInner(id) {
   if (live) {
     const now = ctx.currentTime;
     land = state._landGain || ctx.createGain();
-    if (!state._landGain) { try { land.connect(state.masterGain); } catch {} }
+    if (!state._landGain) { try { land.connect(mixOutNode()); } catch {} }
     const was = state._landGain ? 1 : 0;
     // The deck's tracks that go straight to its bus: onto the landing gain as
     // well, which starts where they are not yet heard through it.

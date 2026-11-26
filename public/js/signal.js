@@ -5,7 +5,7 @@ import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
-import { deckOf, deckSilent, state } from "./state.js";
+import { deckOf, deckSilent, masterBusTrack, state } from "./state.js";
 import { EQ_BAND_DEFS, eqValue, splitEqKey } from "./soundDefaults.js";
 
 
@@ -224,8 +224,8 @@ export function sendGain(amt) {
 
 /** The buses a track could send to: its own deck's, never itself, never a loop. */
 export function sendTargets(t) {
-  if (!t || t._deckBus) return [];
-  return state.tracks.filter(b => b.engineKey === "bus" && !b._deckBus && b !== t
+  if (!t || t._deckBus || t._masterBus) return [];
+  return state.tracks.filter(b => b.engineKey === "bus" && !b._deckBus && !b._masterBus && b !== t
     && (b._deck || "") === (t._deck || "") && !wouldFeedback(t, b.id));
 }
 
@@ -244,7 +244,7 @@ export function setTrackSend(t, busId, amt) {
   const list = (t.sends || []).filter(s => String(s.bus) !== id);
   if (a > 0) {
     const bus = trackById(id);
-    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || wouldFeedback(t, id)) {
+    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || bus._masterBus || wouldFeedback(t, id)) {
       setStatus("that send would feed back on itself, so it was left off");
       t.sends = list;
       syncTrackSends(t);
@@ -318,7 +318,7 @@ export function syncTrackSends(t) {
   const want = new Map();
   for (const s of t.sends || []) {
     const bus = trackById(s.bus);
-    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || !(s.amt > 0)) continue;
+    if (!bus || bus === t || bus.engineKey !== "bus" || bus._deckBus || bus._masterBus || !(s.amt > 0)) continue;
     if (String(t.out) === String(bus.id)) continue;      // the whole track already goes there
     if (wouldFeedback(t, bus.id)) continue;
     const input = bus.voice?.getInputNode?.();
@@ -369,7 +369,10 @@ export function outputTargetFor(t) {
   // `_landGain` stands in for the master after a mix has landed, until the
   // transport next stops: the landed tracks were crossfaded onto it rather
   // than re-pointed under a duck (mix.js, landDeckB).
-  const master = deckBusFor(t)?.voice?.getInputNode?.() || state._landGain || state.masterGain || state.audioCtx?.destination || null;
+  // And with a master fx bus on the desk (mix.js), the master itself is that
+  // bus's input for everything but the bus.
+  const master = deckBusFor(t)?.voice?.getInputNode?.() || (t._masterBus ? null : state._landGain || mixOutNode())
+    || state.masterGain || state.audioCtx?.destination || null;
   if (!t.out || t.out === "master") return master;
   const bus = trackById(t.out);
   if (!bus || bus === t || bus.engineKey !== "bus") return master;
@@ -384,15 +387,25 @@ export function outputTargetFor(t) {
  */
 export function deckBusFor(t) {
   const m = state.mix;
-  if (!m || !t || t._deckBus) return null;
+  if (!m || !t || t._deckBus || t._masterBus) return null;
   const bus = t._deck ? deckOf(t)?.bus : m.busA;
   return bus && state.tracks.includes(bus) ? bus : null;
 }
 
 /** The bus a track feeds: its send, else its deck's bus, else null (the master). */
 function sendOf(t) {
-  if (t?.out && t.out !== "master") return trackById(t.out) || deckBusFor(t);
-  return deckBusFor(t);
+  const master = () => deckBusFor(t) || (t && !t._masterBus ? masterBusTrack() : null);
+  if (t?.out && t.out !== "master") return trackById(t.out) || master();
+  return master();
+}
+
+/**
+ * Where the mix leaves for the master: the master fx bus's input when there
+ * is one (mix.js), else the master gain.
+ * @returns {AudioNode|null}
+ */
+export function mixOutNode() {
+  return masterBusTrack()?.voice?.getInputNode?.() || state.masterGain || state.audioCtx?.destination || null;
 }
 
 export function routeTrackOutput(t, swap = false) {
@@ -454,7 +467,7 @@ export function setTrackOutput(t, out) {
   const next = out && out !== "master" ? String(out) : "master";
   if (next !== "master") {
     const bus = trackById(next);
-    if (!bus || bus === t || bus.engineKey !== "bus" || wouldFeedback(t, bus.id)) {
+    if (!bus || bus === t || bus.engineKey !== "bus" || bus._masterBus || wouldFeedback(t, bus.id)) {
       t.out = "master";
       routeTrackOutput(t);
       refreshOutputSelects();
@@ -870,11 +883,11 @@ export function soloAudibleTracks() {
  */
 export function refreshOutputSelects() {
   // A deck bus (mix.js) is never a send, and a track only sends within its deck.
-  const buses = state.tracks.filter(x => x.engineKey === "bus" && !x._deckBus);
+  const buses = state.tracks.filter(x => x.engineKey === "bus" && !x._deckBus && !x._masterBus);
   for (const t of state.tracks) {
     const sel = t.el?.querySelector(".sq-track__out");
     if (!sel) continue;
-    const targets = t._deckBus ? [] : buses.filter(b => b !== t && (b._deck || "") === (t._deck || "") && !wouldFeedback(t, b.id));
+    const targets = t._deckBus || t._masterBus ? [] : buses.filter(b => b !== t && (b._deck || "") === (t._deck || "") && !wouldFeedback(t, b.id));
     if (t.out && t.out !== "master" && !targets.some(b => String(b.id) === String(t.out))) {
       t.out = "master";
     }

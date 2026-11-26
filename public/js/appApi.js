@@ -28,7 +28,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
-import { loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
+import { addMasterBus, removeMasterBus, loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
 import { measureSet } from "./measure.js";
 import { captureStart, closeReplay, forkPoint, loadReplay, openFork, pauseReplay, playReplay, replayState, seekReplay, setRecordState, toggleSetRecord } from "./setRecorder.js";
@@ -166,6 +166,8 @@ export function installAppApi() {
       ejectClipSong,
       land: landDeckB,
       keepBoth: keepBothDecks,
+      masterFx: addMasterBus,
+      masterFxOff: removeMasterBus,
       play: setDeckPlaying,
       playA: setDeckAPlaying,
       scene: requestDeckScene,

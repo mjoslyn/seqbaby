@@ -32,7 +32,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, deckPlaying, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
+  addMasterBus, masterBus, removeMasterBus, deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, deckPlaying, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve, setXfadeBands,
 } from "./mix.js";
@@ -177,13 +177,13 @@ function wireStripDrag(desk, release) {
     const el = e.target.closest?.(".sq-mix__strip");
     const t = dragId && trackById(dragId);
     const over = el && trackById(el.dataset.trackId);
-    if (!t || !over || over === t || over._deckBus || (over._deck || null) !== (t._deck || null)
+    if (!t || !over || over === t || over._deckBus || over._masterBus || (over._deck || null) !== (t._deck || null)
       || (over.engineKey === "bus") !== (t.engineKey === "bus")) return null;
     const r = el.getBoundingClientRect();
     const after = e.clientX > r.left + r.width / 2;
     let before = over;
     if (after) {
-      const group = state.tracks.filter((x) => x !== t && !x._deckBus && (x._deck || null) === (t._deck || null)
+      const group = state.tracks.filter((x) => x !== t && !x._deckBus && !x._masterBus && (x._deck || null) === (t._deck || null)
         && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving);
       before = group[group.indexOf(over) + 1] || null;
     }
@@ -229,7 +229,7 @@ function wireStripDrag(desk, release) {
     if (!t) return;
     e.preventDefault();
     e.stopPropagation();
-    const group = state.tracks.filter((x) => !x._deckBus && (x._deck || null) === (t._deck || null)
+    const group = state.tracks.filter((x) => !x._deckBus && !x._masterBus && (x._deck || null) === (t._deck || null)
       && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving);
     const i = group.indexOf(t);
     const moved = e.key === "ArrowLeft"
@@ -241,25 +241,28 @@ function wireStripDrag(desk, release) {
 
 function strip(t, shown) {
   const bus = t.engineKey === "bus";
-  const deckBus = !!t._deckBus;
+  const master = !!t._masterBus;
+  const deckBus = !!t._deckBus || master;
   const [hue, color] = bus ? [0, "var(--fg-dim)"] : trackHue(t);
   const cls = ["sq-mix__strip"];
   if (bus) cls.push("is-bus");
   if (deckBus) cls.push("is-deck-bus");
+  if (master) cls.push("is-master");
   if (t.muted) cls.push("is-muted");
   if (shown && shown.id === t.id) cls.push("is-selected");
   const slot = trackSlot(t);
-  const name = deckBus ? `deck ${deckLabel(t._deckBus)}` : (t.name || "track");
+  const what = master ? "the whole mix" : "this deck";
+  const name = master ? "master fx" : deckBus ? `deck ${deckLabel(t._deckBus)}` : (t.name || "track");
   // a deck's bus carries the deck's tone: three bands and a filter
   const tone = deckBus ? `<div class="sq-mix__tone">
-      ${proxy(t, ".p-eq-high", { label: "hi", title: "this deck's highs (the bus's own eq, ±18dB). Double-click for flat" })}
-      ${proxy(t, ".p-eq-mid", { label: "mid", title: "this deck's mids" })}
-      ${proxy(t, ".p-eq-low", { label: "low", title: "this deck's lows: cut one deck's bass while the other's comes in" })}
-      ${proxy(t, ".p-cutoff", { label: "filter", title: "a lowpass over the whole deck (the bus's own filter)" })}
+      ${proxy(t, ".p-eq-high", { label: "hi", title: `${what}'s highs (the bus's own eq, ±18dB). Double-click for flat` })}
+      ${proxy(t, ".p-eq-mid", { label: "mid", title: `${what}'s mids` })}
+      ${proxy(t, ".p-eq-low", { label: "low", title: master ? "the whole mix's lows" : "this deck's lows: cut one deck's bass while the other's comes in" })}
+      ${proxy(t, ".p-cutoff", { label: "filter", title: `a lowpass over ${master ? "everything" : "the whole deck"} (the bus's own filter)` })}
     </div>` : `<div class="sq-mix__tone">${bus ? "" : proxy(t, ".fx-pan-pos", { label: "pan", title: "where this track sits, left to right (its pan stage)" })}</div>`;
   return `<div class="${cls.join(" ")}" data-track-id="${t.id}" style="--track-hue:${hue};--track-color:${color}">
     <button type="button" class="sq-mix__name" data-act="select"${deckBus ? "" : ' draggable="true"'} title="${esc(deckBus
-      ? `${name}: everything on this deck sums here. Select it to open its eq, rack, mod and lanes below`
+      ? `${name}: everything ${master ? "goes through here on the way out" : "on this deck sums here"}. Select it to open its eq, rack, mod and lanes below`
       : `${name}: select it to edit its ${bus ? "rack and lanes" : "notes and sound"} below. Drag it along the deck (or alt + ← →) to move it`)}">${esc(name)}</button>
     ${tone}
     <div class="sq-mix__fader">
@@ -267,9 +270,9 @@ function strip(t, shown) {
       ${proxy(t, ".p-vol", { cls: "is-fader", title: `${name}: level. Drag to move it; double-click to put it where you clicked` })}
     </div>
     <div class="sq-mix__ms">
-      <button type="button" class="sq-mix__cue" data-act="cue" aria-pressed="${!!t._cue}" title="cue: hear ${deckBus ? "this deck" : "it"} in the cue output, apart from the mix">C</button>
+      <button type="button" class="sq-mix__cue" data-act="cue" aria-pressed="${!!t._cue}" title="cue: hear ${deckBus ? what : "it"} in the cue output, apart from the mix">C</button>
       <button type="button" class="sq-mix__mute" data-act="mute" aria-pressed="${!!t.muted}" ${t.soloed ? "disabled" : ""} title="mute">M</button>
-      <button type="button" class="sq-mix__solo" data-act="solo" aria-pressed="${!!t.soloed}" ${t.muted ? "disabled" : ""} title="solo${deckBus ? ": hear this deck alone" : ""}">S</button>
+      ${master ? `<button type="button" class="sq-mix__x" data-act="master-off" title="take the master fx bus off: everything goes straight to the master again, and its settings go with it" aria-label="remove the master fx bus">×</button>` : `<button type="button" class="sq-mix__solo" data-act="solo" aria-pressed="${!!t.soloed}" ${t.muted ? "disabled" : ""} title="solo${deckBus ? ": hear this deck alone" : ""}">S</button>`}
       ${deckBus ? "" : `<button type="button" class="sq-mix__x" data-act="eject-track" title="${esc(t._deck ? `eject ${name}: take this one track off the deck (the deck's last track takes the deck with it)` : `remove ${name} from the song (it asks first, and undo brings it back)`)}" aria-label="eject ${esc(name)}">×</button>`}
     </div>
     <span class="sq-mix__slot" title="${bus ? "a bus plays no notes" : t._clipOff ? "this track's clip is stopped" : `on pattern ${slot + 1}`}">${bus ? "bus" : `${t._clipOff ? "off" : `p${slot + 1}`}${t._frozen ? " ❄" : ""}`}</span>
@@ -407,11 +410,20 @@ function otherDecks(shown) {
     <button type="button" class="sq-mix__add" data-act="load" title="load another song onto a new deck">+<span>deck</span></button>`;
 }
 
+/** The bar's way to the master fx bus: adds it, or selects the one there. */
+function masterBtn() {
+  const on = !!masterBus();
+  return `<button type="button" class="sq-mix__masterbtn" data-act="master-fx" aria-pressed="${on}" title="${on
+    ? "the master fx bus: select it to open its filter, eq, rack, mod and lanes below"
+    : "add a master fx bus: one bus every track and every deck goes through on the way out, with its own filter, eq, fx rack, mod matrix and lanes. It is this desk's, not the song's: it is not saved, and it stays when you land or open another song"}">master fx</button>`;
+}
+
 function bar() {
   const m = deskMix();
   if (!m) {
     return `<div class="sq-mix__bar">
       <button type="button" data-act="load" title="load another song onto a deck, to mix it with this one or move over to it">load a deck…</button>
+      ${masterBtn()}
       <span class="sq-mix__hint">a fader, a pan, mute and solo per track. Select a strip to edit that track below.</span>
     </div>`;
   }
@@ -442,6 +454,7 @@ function bar() {
     ${tempo}
     ${xfadeRow()}
     <span class="sq-mix__grow"></span>
+    ${masterBtn()}
     <button type="button" data-act="keep" ${busy ? "disabled" : ""} title="keep every deck as one song: each deck becomes a bus, with the crossfader's balance in its fader">keep ${n === 2 ? "both" : `all ${n}`}</button>
   </div>`;
 }
@@ -562,7 +575,8 @@ function render() {
   const shown = detail.sync();
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
-  desk.innerHTML = `${bar()}<div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
+  const mb = masterBus();
+  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb ? `<div class="sq-mix__master"><b>master</b>${strip(mb, shown)}</div>` : ""}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
@@ -763,6 +777,8 @@ async function onClick(e) {
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }
+  if (act === "master-fx") { const mb = addMasterBus(); scheduleMixPaint(); if (mb) detail.select(mb); return; }
+  if (act === "master-off") { removeMasterBus(); scheduleMixPaint(); return; }
   const el = e.target.closest(".sq-mix__strip");
   const t = el && trackById(el.dataset.trackId);
   if (!t) return;

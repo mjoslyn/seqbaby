@@ -150,7 +150,13 @@ export const state = {
 // which is the song plus deck A's bus (its lanes belong to A's patterns).
 
 /** Whether a track is the song's own: serialized, undone, shared. */
-export function inSong(t) { return !!t && !t._deck && !t._deckBus; }
+export function inSong(t) { return !!t && !t._deck && !t._deckBus && !t._masterBus; }
+/**
+ * The master fx bus (mix.js, `_masterBus`): a bus everything goes through on
+ * the way to the master, the desk's own. Not the song's: never saved, undone
+ * or shared, and it stays when another song is opened.
+ */
+export function masterBusTrack() { return state.tracks.find(t => t._masterBus && !t._leaving) || null; }
 /** Whether a track follows the pattern bar's scene (the song, and deck A's bus). */
 export function onDeckA(t) { return !!t && !t._deck; }
 /** The deck a track belongs to (mix.js's record of it), or null: the song's, or none. */
@@ -159,7 +165,7 @@ export function deckOf(t) { return (t?._deck && state.mix?.decks?.find(d => d.id
 export function songTracks() { return state.tracks.filter(inSong); }
 /** A deck withheld: loaded but not started (or gone), so its tracks play nothing. */
 export function deckSilent(t) {
-  if (!t || t._deckBus) return false;
+  if (!t || t._deckBus || t._masterBus) return false;
   if (!t._deck) return !!state.mix?.aOff;          // deck A, stopped from the mix view
   return !deckOf(t)?.on;
 }

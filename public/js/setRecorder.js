@@ -58,6 +58,7 @@ function trackRefs() {
   const map = new Map();
   const counts = {};
   for (const t of state.tracks) {
+    if (t._masterBus) { map.set(t, "master"); continue; }
     if (t._deckBus) { map.set(t, `bus:${t._deckBus}`); continue; }
     const d = t._deck || "a";
     if (d === "~") continue;                         // on its way out

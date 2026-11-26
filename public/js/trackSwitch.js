@@ -33,7 +33,7 @@ function labelOf(t, n) {
 export function switchGroups() {
   const groups = new Map();
   for (const t of state.tracks) {
-    if (t._leaving || t._deck === "~") continue;
+    if (t._leaving || t._deck === "~" || t._masterBus) continue;
     const key = t._deck || (t._deckBus && t._deckBus !== "a" ? t._deckBus : "");
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(t);

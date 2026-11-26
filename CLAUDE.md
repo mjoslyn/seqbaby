@@ -3353,9 +3353,26 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   back the session taken at `audition`), and is never saved from the panel:
   `keep` leaves it on the deck, and it is saved by landing it or keeping both.
   A proposal whose deck has gone is dropped with a note.
+- **The master fx bus** (the mix bar's `master fx`; `addMasterBus` /
+  `removeMasterBus` / `masterBus`, mix.js). One bus everything goes through
+  on the way to the master: every track of the song, and every deck's bus
+  while decks are loaded. A real `bus` track flagged `_masterBus`
+  (`masterBusTrack`, state.js), so it has a fader, filter, eq, rack, mod
+  matrix and lanes with no code of its own; signal.js reads "master" as its
+  input (`mixOutNode`, used by `outputTargetFor` and the landing gain), and
+  `sendOf` follows it, so solo and the noise beds see the chain. Drawn as a
+  `master` block at the desk's right (three bands, a filter, a fader, mute,
+  cue, × to take it off) with its own card as the detail; its card is hidden
+  in the track list (`is-master-bus`) and it is never an `out` or send
+  target. **It is the desk's, not the song's**: `inSong` is false, so it is
+  not saved, undone, shared in a jam or in a mute scene; `applySet` leaves
+  it standing, so it stays through a landing, an eject and another song
+  being opened; a reload starts without one. Its lanes follow the pattern
+  bar's scene (`onDeckA`). Adding it is a swap (an empty bus at unity is the
+  same signal), taking it off goes under each rack's fade.
 - A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
   jam: peers get the landed or kept session.
-- `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `play`, `scene`,
+- `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `masterFx`, `masterFxOff`, `play`, `scene`,
   `xfade`, `fadeTo`, `tempo`, `loaded`, `serialize`, `merge`) drives it
   without the view.
 - Known limits: one bar line and one swing for both decks; synced delays and

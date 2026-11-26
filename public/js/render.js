@@ -559,7 +559,7 @@ export function placeBusesLast() {
   // on their way out with the last), then the deck buses, A's first.
   const decks = (state.mix?.decks || []).map(d => d.id);
   const at = id => { const i = decks.indexOf(id); return i < 0 ? decks.length : i; };
-  const rank = t => t._deckBus ? 1e6 + (t._deckBus === "a" ? 0 : 1 + at(t._deckBus))
+  const rank = t => t._masterBus ? 2e6 : t._deckBus ? 1e6 + (t._deckBus === "a" ? 0 : 1 + at(t._deckBus))
     : t._deck ? 2 + 2 * at(t._deck) + (isBus(t) ? 1 : 0)
     : isBus(t) ? 1 : 0;
   if (!state.tracks.some(t => rank(t) > 0)) return false;

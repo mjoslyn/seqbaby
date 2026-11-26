@@ -720,7 +720,8 @@ export function applySet(s) {
   state.arrRecord = false;                        // a recording into the song being replaced: dropped with it
   state.arrRecStart = null;
   state.arrBar = 0;
-  for (const t of [...state.tracks]) removeTrack(t);
+  // the master fx bus is the desk's, not the song's (mix.js): it stays
+  for (const t of [...state.tracks]) if (!t._masterBus) removeTrack(t);
   if (Number.isFinite(s.bpm))   document.getElementById("bpm").value = s.bpm;
   if (Number.isFinite(s.swing)) document.getElementById("swing").value = s.swing;
   if (s.scale) { Object.assign(state.scale, s.scale); syncScaleUI(); refreshChanceScale(); }

@@ -4775,6 +4775,20 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
    the track list: their home is the mix view's detail pane, where the card of
    the selected strip is moved (trackDetail.js). */
 #tracks > .sq-track.is-deck-b, #tracks > .sq-track.is-deck-bus { display: none !important; }
+/* The master fx bus (mix.js): the desk's, shown as a strip at the mix view's
+   right and as its own card under it, never in the track list. */
+#tracks > .sq-track.is-master-bus { display: none !important; }
+.sq-track.is-master-bus .sq-track__slot, .sq-track.is-master-bus .sq-track__remove, .sq-track.is-master-bus .sq-track__dup,
+.sq-track.is-master-bus .sq-track__engine-btn, .sq-track.is-master-bus .sq-track__out-field,
+.sq-track.is-master-bus .sq-track__sends, .sq-track.is-master-bus .sq-track__bus-in,
+.sq-track.is-master-bus .sq-track__solo { display: none !important; }
+.sq-mix__body.has-master { display: flex; gap: 10px; align-items: flex-start; }
+.sq-mix__body.has-master > .sq-mix__decks { flex: 1 1 auto; min-width: 0; }
+.sq-mix__master { flex: 0 0 auto; display: grid; gap: 6px; justify-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+  background: color-mix(in oklab, var(--fg) 3%, transparent); }
+.sq-mix__master > b { font-size: 11px; letter-spacing: 0.08em; color: var(--fg-dim); }
+.sq-mix__strip.is-master { border-top-color: var(--fg); background: color-mix(in oklab, var(--fg) 6%, var(--bg)); }
+.sq-mix__masterbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 /* the "off the scene" badge means the pattern bar's scene, which is not a deck B track's */
 .sq-track.is-deck-b .sq-track__slot, .sq-track.is-deck-bus .sq-track__slot { display: none !important; }
 /* a deck's bus is the deck: it is not removed, copied, sent anywhere or re-engined by hand */
