@@ -919,7 +919,7 @@ main {
 .sq-track__volrow { display: inline-flex; gap: 10px; align-items: center; flex-wrap: nowrap; }
 .sq-track__sends { display: inline-flex; gap: 8px; align-items: flex-end; }
 .sq-track__sends[hidden] { display: none !important; }
-.sq-track__sends .sq-send { --knob-size: 26px; }
+.sq-track__head .sq-track__sends .sq-send .sq-knob { --knob-size: 44px; }
 .sq-track__sends .sq-send label { max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-2); }
 
 .sq-track__head {
