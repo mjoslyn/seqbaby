@@ -26,6 +26,7 @@
  * open, as the clip view is; never while a control in it is held.
  */
 
+import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 import { toggleCue } from "./cue.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
@@ -87,8 +88,46 @@ function playStop(L, on, armed, stopping, dis, whose, armOn) {
  * transport is started first (its own play button) and the fade asked for
  * once it plays; clicks made meanwhile only replace what is asked.
  */
+/** A deck's filled pattern slots, in order. */
+const slotsOf = (id) => { const o = []; for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i, id)) o.push(i); return o; };
+
+/**
+ * The `auto` fade: out over the playing deck's LAST pattern, in on the
+ * incoming decks' FIRST. Where it begins is the start of the last filled
+ * pattern of the deck being faded away from, how long it takes is that
+ * pattern's length (the bars its chain plays it for, or its own length when
+ * that is longer), and every deck on the side faded to that is not playing
+ * yet is put on its first filled pattern, so it comes in from its top.
+ * @returns {{at: number, bars: number, ref: string}|null} null: nothing to go by
+ */
+function autoFade(side) {
+  const ref = fadeDeck();
+  const slots = slotsOf(ref);
+  if (!slots.length) return null;
+  const last = slots[slots.length - 1];
+  const tracks = (ref === "a" ? deckATracks() : deckBTracks(ref)).filter((t) => t.engineKey !== "bus");
+  const perBar = Math.max(1, stepsPerBarForMeter(patternMeter(last)));
+  const own = Math.max(1, ...tracks.map((t) => Math.ceil(((t.patterns?.[last]?.steps?.length || 0) / (Number(t.speed) || 1)) / perBar)));
+  const reps = ref === "a" ? state.patternRepeats?.[last] : deskDecks().find((d) => d.id === ref)?.repeats?.[last];
+  const bars = Math.max(1, Math.min(64, Math.max(own, Number(reps) || 1)));
+  for (const id of ["a", ...deskDecks().map((d) => d.id)]) {
+    if (id === ref || deckSide(id) !== side || deckPlaying(id)) continue;
+    const first = slotsOf(id)[0];
+    if (first == null || deckSceneOf(id) === first) continue;
+    if (id === "a") requestSongScene(first, { when: "now" });
+    else requestDeckScene(first, id, { when: "now" });
+  }
+  return { at: last, bars, ref };
+}
+
 function queueFade(side, now = false) {
-  const run = () => fadeToDeck(side === "l" ? "a" : "b", fadeBars, now ? { now: true } : { at: fadeAt.pat, bar: fadeAt.bar, ref: fadeDeck() });
+  const run = () => {
+    const to = side === "l" ? "a" : "b";
+    if (now) return fadeToDeck(to, fadeBars, { now: true });
+    const auto = fadeAt.pat === "auto" ? autoFade(side) : null;
+    if (auto) return fadeToDeck(to, auto.bars, { at: auto.at, bar: 0, ref: auto.ref });
+    return fadeToDeck(to, fadeBars, { at: fadeAt.pat === "auto" ? "playing" : fadeAt.pat, bar: fadeAt.bar, ref: fadeDeck() });
+  };
   if (state.playing) { pendingFade = null; run(); return; }
   const starting = !!pendingFade;
   pendingFade = run;
@@ -515,14 +554,14 @@ function xfadeParts() {
   if (fadeHad && !m.fade) fadeAt.deck = null;
   fadeHad = !!m.fade;
   const ref = fadeDeck(), RL = deckLabel(ref);
-  const slotsOf = (id) => { const o = []; for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i, id)) o.push(i); return o; };
   // every playing deck's patterns, the deck the fade goes by first
   const playing = ["a", ...deskDecks().map((d) => d.id)].filter((id) => deckPlaying(id));
   const listed = [ref, ...playing.filter((id) => id !== ref)];
   if (typeof fadeAt.pat === "number" && !slotsOf(ref).includes(fadeAt.pat)) fadeAt.pat = "playing";
   const { pat, bar } = fadeAt;
   const bt = bar ? `bar ${bar + 1} of ` : "";
-  const when = pat === "bar" ? (bar ? `${bar} bar${bar === 1 ? "" : "s"} after the next bar line` : "on the next bar line")
+  const when = pat === "auto" ? `on deck ${RL}'s last pattern, for as long as that pattern lasts, with the decks coming in put on their first`
+    : pat === "bar" ? (bar ? `${bar} bar${bar === 1 ? "" : "s"} after the next bar line` : "on the next bar line")
     : pat === "playing" ? `on ${bt || "the start of "}the pattern deck ${RL} is playing, when it comes round`
     : `on ${bt || "the start of "}deck ${RL}'s pattern ${pat + 1}`;
   const arrow = (side) => {
@@ -537,8 +576,8 @@ function xfadeParts() {
     const L2 = esc(deckLabel(id)), mine = id === ref;
     return `<optgroup label="deck ${L2}">${opt(`${id}:playing`, `${L2} pat (${deckSceneOf(id) + 1})`, mine && pat === "playing")}${slotsOf(id).map((i) => opt(`${id}:${i}`, `${L2} pat ${i + 1}`, mine && pat === i)).join("")}</optgroup>`;
   }).join("");
-  const patSel = `<select data-act="fade-pat" aria-label="the pattern a fade begins in" title="the pattern a fade (either way) begins in. any: the next bar line. A deck's pat (N): the pattern that deck is playing, when it comes round; a number: that pattern of that deck (one holding one pattern is sent to it, a chain arrives by itself). Every playing deck is listed; left alone it follows the deck nearest the crossfader, deck ${esc(RL)} now">${opt("bar", "any", pat === "bar")}${groups}</select>`;
-  const barSel = `<select data-act="fade-bar" aria-label="the bar a fade begins on" title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === bar ? " selected" : ""}>${pat === "bar" ? "" : `${esc(RL)} `}bar ${i + 1}</option>`).join("")}</select>`;
+  const patSel = `<select data-act="fade-pat" aria-label="the pattern a fade begins in" title="the pattern a fade (either way) begins in. any: the next bar line. auto: out over the last pattern of the deck playing and in on the first pattern of the decks coming in, the fade as long as that last pattern (the bar and length selects are not used). A deck's pat (N): the pattern that deck is playing, when it comes round; a number: that pattern of that deck (one holding one pattern is sent to it, a chain arrives by itself). Every playing deck is listed; left alone it follows the deck nearest the crossfader, deck ${esc(RL)} now">${opt("bar", "any", pat === "bar")}${opt("auto", "auto", pat === "auto")}${groups}</select>`;
+  const barSel = `<select data-act="fade-bar" aria-label="the bar a fade begins on" ${pat === "auto" ? "disabled" : ""} title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === bar ? " selected" : ""}>${pat === "bar" ? "" : `${esc(RL)} `}bar ${i + 1}</option>`).join("")}</select>`;
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");
   return {
     L, R,
@@ -546,7 +585,7 @@ function xfadeParts() {
     fadeL: arrow("l"),
     fadeR: arrow("r"),
     at: `<div class="sq-mix__fade" role="group" aria-label="where a fade begins"><span class="sq-mix__fadeat">xfade at</span>${patSel}${barSel}</div>`,
-    length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes. Changed while a fade is queued or running, it changes that fade too">${bars}</select>`,
+    length: `<select data-act="fade-bars" aria-label="fade length" ${pat === "auto" ? "disabled" : ""} title="how long an automatic fade takes. Changed while a fade is queued or running, it changes that fade too">${bars}</select>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
     bands: `<label class="sq-mix__check" title="how the crossfader moves the bass, mids and highs. ${esc(m.bands || "together")}: ${esc(XFADE_BAND_TIPS[m.bands || "together"] || "")}"><select data-act="xf-bands" aria-label="crossfader bands">${XFADE_BANDS.map((b) => `<option value="${b}"${(m.bands || "together") === b ? " selected" : ""} title="${esc(XFADE_BAND_TIPS[b])}">${b}</option>`).join("")}</select></label>`,
   };
@@ -736,7 +775,7 @@ function onChange(e) {
   if (act === "fade-pat" || act === "fade-bar") {
     if (act === "fade-pat") {
       const [id, v] = el.value.split(":");
-      if (el.value === "bar") fadeAt.pat = "bar";
+      if (el.value === "bar" || el.value === "auto") fadeAt.pat = el.value;
       else { fadeAt.deck = id; fadeAt.pat = v === "playing" ? v : Number(v); }
     }
     else fadeAt.bar = Number(el.value) || 0;
@@ -946,6 +985,12 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
 
   const go = async (get) => {
     list.innerHTML = `<div class="sq-mix__hint">loading…</div>`;
+    // The song arrives as megabytes (its samples inside it), and reading it
+    // is main-thread work that happens before the deck's own loader can
+    // stretch the lookahead: stretched here, before the fetch, so the steps
+    // playing are already scheduled past it. The loader restores it when
+    // the deck is built; a load that fails restores it here.
+    if (state.playing) stretchLookAhead();
     try {
       const got = await get();
       if (!got?.session) throw new Error("that song is empty");
@@ -953,6 +998,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
       await (asA ? loadDeckA : loadDeckB)(got.session, { title: got.title, source: got.source, ...extra });
     } catch (err) {
       console.error(err);
+      if (!(state.mix?.decks || []).some((d) => d.loading)) restoreLookAhead();
       setStatus(`deck: ${err?.message || "that song did not load"}`, true);
       if (overlay.isConnected) list.innerHTML = `<div class="sq-mix__hint is-error">${esc(err?.message || "that song did not load")}</div>`;
     }

@@ -3138,6 +3138,13 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   a landing's bookkeeping waits the same settle after its 45ms crossfade,
   and `sendOff` removes tracks one per task (its `done` runs `settle` and
   restores the lookahead). No late steps at 3x; a handful within 15ms at 6x.
+- **The picker stretches the lookahead before it fetches** (`go`,
+  mixView.js): a song arrives as megabytes and reading it is main-thread
+  work done before `loadDeckB` can stretch anything; a failed load restores
+  it. And the track builds are spaced (`BUILD_GAP`, 30ms while playing)
+  rather than run back to back, so the clock, the screen and the audio
+  thread (each track is several worklet processors made there) get a moment
+  between them.
 - **Routing a song through deck A's bus is a swap, not a duck**
   (`routeTrackOutput(t, swap)`, `refreshAllTrackOutputs({swap: true})`):
   the bus at unity is the same level by another path, so the new connection
@@ -3214,6 +3221,14 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   callers. The decks the fade started carry `armFade` and come in on the bar
   line the fade begins on, not on their own start line. Deck A in arrange
   mode has no pattern to wait for and ignores the target.
+- **`auto` in the fade's pattern select** (`autoFade`, mixView.js): out over
+  the playing deck's LAST filled pattern, in on the FIRST of the decks
+  coming in. The fade begins where that last pattern starts, lasts as long
+  as it does (the bars its chain plays it for, or its own length in bars
+  when longer), and each deck on the side faded to that is not playing yet
+  is put on its first filled pattern before it is started. The bar and
+  length selects are greyed while it is picked. It is `fadeToDeck` with a
+  slot and a computed length, so everything above still holds.
 - **The crossfader has six shapes** (`XFADE_CURVES` / `XFADE_CURVE_TIPS`,
   mixPlan.js, the select after the arrows): `blend` (equal power), `smooth`
   (equal power over an eased travel), `linear`, `full` (each side full on its

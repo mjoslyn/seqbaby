@@ -218,6 +218,12 @@ export function removeMasterBus() {
 
 // ---- loading a deck -------------------------------------------------------------
 
+// Between one track's build and the next while the transport runs: a track
+// is tens of milliseconds of main thread AND several worklet processors made
+// on the audio thread, and back to back a deck's worth left neither the
+// clock, the screen nor the audio thread a moment between them.
+const BUILD_GAP = () => (state.playing ? 30 : 0);
+
 /** A deck's bus: an ordinary `bus` track, flagged, at unity. */
 function makeDeckBus(deck) {
   const t = createTrack({ name: `deck ${deckLabel(deck)}`, engineKey: "bus", length: 16, params: { vol: 1 } });
@@ -363,7 +369,7 @@ function buildBuses(d) {
     if (state.ready) refreshAllTrackOutputs({ swap: true });
     applyXfade();
     announce();
-    setTimeout(() => buildBuses(d), 0);
+    setTimeout(() => buildBuses(d), BUILD_GAP());
     return;
   }
   d.bus = makeDeckBus(d.id);
@@ -372,7 +378,7 @@ function buildBuses(d) {
   refreshOutputSelects();
   applyXfade();
   announce();
-  setTimeout(() => buildNext(d), 0);
+  setTimeout(() => buildNext(d), BUILD_GAP());
 }
 
 /**
@@ -416,7 +422,7 @@ function buildNext(d) {
   placeBusesLast();
   orderDeck(d);
   announce();
-  setTimeout(() => buildNext(d), 0);
+  setTimeout(() => buildNext(d), BUILD_GAP());
 }
 
 /**
