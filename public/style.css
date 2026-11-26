@@ -4788,6 +4788,9 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
   background: color-mix(in oklab, var(--fg) 3%, transparent); }
 .sq-mix__master > b { font-size: 11px; letter-spacing: 0.08em; color: var(--fg-dim); }
 .sq-mix__strip.is-master { border-top-color: var(--fg); background: color-mix(in oklab, var(--fg) 6%, var(--bg)); }
+.sq-mix__tone.is-feed { min-height: 0; }
+.sq-mix__tone.is-feed:empty { display: none; }
+.sq-mix__feed span { color: var(--fg); }
 .sq-mix__masterbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 /* the "off the scene" badge means the pattern bar's scene, which is not a deck B track's */
 .sq-track.is-deck-b .sq-track__slot, .sq-track.is-deck-bus .sq-track__slot { display: none !important; }

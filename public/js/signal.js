@@ -371,7 +371,7 @@ export function outputTargetFor(t) {
   // than re-pointed under a duck (mix.js, landDeckB).
   // And with a master fx bus on the desk (mix.js), the master itself is that
   // bus's input for everything but the bus.
-  const master = deckBusFor(t)?.voice?.getInputNode?.() || (t._masterBus ? null : state._landGain || mixOutNode())
+  const master = deckBusFor(t)?.voice?.getInputNode?.() || (t._masterBus ? null : state._landGain || feedFor(t._deckBus ? t : "song")?.in)
     || state.masterGain || state.audioCtx?.destination || null;
   if (!t.out || t.out === "master") return master;
   const bus = trackById(t.out);
@@ -405,7 +405,77 @@ function sendOf(t) {
  * @returns {AudioNode|null}
  */
 export function mixOutNode() {
-  return masterBusTrack()?.voice?.getInputNode?.() || state.masterGain || state.audioCtx?.destination || null;
+  return feedFor("song")?.in || state.masterGain || state.audioCtx?.destination || null;
+}
+
+// ---- the master fx bus's feeds: a wet / dry per deck ---------------------------
+//
+// With a master fx bus on the desk, what leaves for the master goes through a
+// FEED: one node in, split into a wet gain (into the master fx bus) and a dry
+// gain (straight to the master gain, round it). One feed per deck's bus, keyed
+// by the bus TRACK (a deck that moves up a letter keeps its own), and one for
+// the song when no deck is loaded ("song": its tracks go into it directly).
+// The crossfade is linear: with nothing on the bus the two paths carry the
+// same signal, and a linear pair holds its level. The desk's, like the bus:
+// never saved.
+
+/** @type {Map<any, {in: GainNode, wet: GainNode, dry: GainNode, to: AudioNode|null}>} */
+const feeds = new Map();
+let wetSong = 1;
+
+/** How much of a deck (its bus track, or "song") goes through the master fx bus: 0..1. */
+export function masterFeedAmount(key) {
+  if (!key || key === "song") return wetSong;
+  if (key._mfxWet == null) key._mfxWet = key === state.mix?.busA ? wetSong : 1;
+  return key._mfxWet;
+}
+
+/** Set it: 1 all through the master fx bus, 0 all round it. */
+export function setMasterFeed(key, amt) {
+  const a = Math.max(0, Math.min(1, Number(amt) || 0));
+  if (!key || key === "song") wetSong = a;
+  else { key._mfxWet = a; if (key === state.mix?.busA) wetSong = a; }
+  for (const k of key === state.mix?.busA ? [key, "song"] : [key || "song"]) {
+    const f = feeds.get(k);
+    const now = state.audioCtx?.currentTime ?? 0;
+    if (!f) continue;
+    try { f.wet.gain.setTargetAtTime(a, now, 0.015); f.dry.gain.setTargetAtTime(1 - a, now, 0.015); } catch {}
+  }
+}
+
+/** A deck's feed, made on first use and kept pointed at the bus's current input. Null: no master fx bus. */
+function feedFor(key) {
+  const ctx = state.audioCtx;
+  const to = masterBusTrack()?.voice?.getInputNode?.();
+  if (!ctx || !to || !state.masterGain) return null;
+  let f = feeds.get(key);
+  if (!f) {
+    f = { in: ctx.createGain(), wet: ctx.createGain(), dry: ctx.createGain(), to: null };
+    const a = masterFeedAmount(key);
+    f.wet.gain.value = a;
+    f.dry.gain.value = 1 - a;
+    f.in.connect(f.wet);
+    f.in.connect(f.dry);
+    f.dry.connect(state.masterGain);
+    feeds.set(key, f);
+  }
+  if (f.to !== to) {                               // the bus's voice was rebuilt
+    try { f.wet.disconnect(); } catch {}
+    try { f.wet.connect(to); } catch {}
+    f.to = to;
+  }
+  return f;
+}
+
+/** Let go of the feeds nothing uses: a deck's that has gone, or all of them once the bus has. */
+function pruneFeeds() {
+  if (!feeds.size) return;
+  const all = !state.tracks.some(t => t._masterBus);
+  for (const [k, f] of feeds) {
+    if (!all && (k === "song" || state.tracks.includes(k))) continue;
+    for (const n of [f.in, f.wet, f.dry]) { try { n.disconnect(); } catch {} }
+    feeds.delete(k);
+  }
 }
 
 export function routeTrackOutput(t, swap = false) {
@@ -455,6 +525,7 @@ export function routeTrackOutput(t, swap = false) {
 export function refreshAllTrackOutputs({ swap = false } = {}) {
   // A track on its way out (a transition's or a mix's `_leaving`) stays where
   // it is until it is removed: re-pointing it could only make it heard again.
+  pruneFeeds();
   for (const t of state.tracks) if (!t._leaving) routeTrackOutput(t, swap);
 }
 
