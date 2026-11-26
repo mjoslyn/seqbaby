@@ -4130,7 +4130,20 @@ track ─▶ rack.switchGain ─┬─▶ rack.gate ─▶ rack.output ─▶ mi
   interface's channels (`maxChannelCount`, discrete), the mix on 1/2 and the
   cue on a chosen pair (3/4, 5/6...). It needs the interface to be the
   system's output; under four channels the mode is refused with a status
-  line. `off` is plain stereo, exactly the graph it always was.
+  line. `device`: the mix in stereo on the system's output and the cue on
+  ANOTHER output device (a second pair of headphones, Bluetooth or not). The
+  cue bus goes into a MediaStreamDestination played by an `<audio>` element
+  whose sink is the chosen device (`startSink`, `setSinkId`); the element is
+  MUTED until the device has taken it, since unpointed it would play on the
+  system's output, the room the cue is kept out of, and a device that has
+  gone leaves it paused with a note rather than falling back. Offered where
+  `canPickDevice()` (desktop Chrome, Edge, Firefox). The panel's `find
+  devices` lists outputs (`findOutputs`): a browser names them only after
+  its own output picker (`selectAudioOutput`) or a microphone prompt, whose
+  stream is closed at once. The pick is `cue.sink` / `sinkLabel`, kept per
+  browser with the rest. Two devices are two clocks, and Bluetooth is a
+  couple of hundred ms behind: it is for hearing a sound, not for timing.
+  `off` is plain stereo, exactly the graph it always was.
 - **`wireOutput()` is the one place the master's last node meets the
   device.** transport.js calls it where it used to connect the limiter, and
   a silent render (bounce.js, measure.js) calls `speakersOff()` /
@@ -4157,8 +4170,10 @@ track ─▶ rack.switchGain ─┬─▶ rack.gate ─▶ rack.output ─▶ mi
   its settings module-local and reads `state` only inside functions.
 - `window.seqbaby.cue` (`set`, `toggle`, `clear`, `state`).
 - Known limits: the metronome goes to outputs 1/2 (both ears in split mono);
-  no output device picker (the system's output is used); no cue button in
-  the clip view's rows.
+  the MIX has no output device picker (the system's output is used; only the
+  cue can be sent elsewhere); the `device` mode is checked in a headless
+  browser only, not with two real devices; no cue button in the clip view's
+  rows.
 
 ## Macro pads (`macro.js`) — a Kaoss pad for the whole session
 
@@ -5750,6 +5765,10 @@ The drawer is laid out around the turn's RESULT, not around a chat log:
   last seven calls, and a line saying it carries on with the drawer shut and
   that hand edits made meanwhile are not in what comes back.
 - **A finished turn is scrolled to its top**, not its last line.
+- **Nothing in the log shrinks** (`.chatLog > * { flex-shrink: 0 }`): the log
+  is a flex column that scrolls, and the ask bubble scrolls too (a genre's
+  brief is capped at 9.5em), so it had no minimum height and a full log
+  squeezed it to a sliver.
 - **The review card** (pinned under the log) is headed by its state
   (`changes ready` / `auditioning`), the name
   the turn gave the song and the diff's headline (`diffHeadline`), over the

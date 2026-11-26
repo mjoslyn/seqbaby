@@ -632,7 +632,12 @@ a.bylineLike { text-decoration: none; }
   /* a genre's brief is a page: it is what was asked, not what to read */
   max-height: 9.5em;
   overflow-y: auto;
+  /* The log is a flex column, and a child that scrolls has no minimum
+     height: once the log was full this bubble was squeezed to a sliver. */
+  flex-shrink: 0;
 }
+/* The same for everything in the log: it scrolls, nothing in it gives way. */
+.chatLog > * { flex-shrink: 0; }
 .cxAskTag { display: inline-block; margin-right: 6px; padding: 0 5px; border: 1px solid #6ee7ff55; border-radius: 4px; color: #8fdcf0; font-size: 10px; }
 .cxError { background: #2a1416; border: 1px solid #4a2226; color: #f87171; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .cxResult {

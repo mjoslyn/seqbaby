@@ -5004,6 +5004,9 @@ body.sq-cue-on .sq-track__cue, body.sq-cue-on .sq-mix__cue { display: inline-fle
 .sq-cue__mode:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
 .sq-cue__mode span { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .sq-cue__mode i { font-style: normal; font-size: 11px; color: var(--fg-dim); }
+.sq-cue__sinkrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sq-cue__sink { max-width: 230px; min-width: 0; }
+.sq-cue__sinknote:empty { display: none; }
 .sq-cue__row { display: flex; gap: 24px; justify-content: center; }
 .sq-cue__tools { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; font-size: 12px; color: var(--fg-dim); }
 .sq-mute-scenes { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }

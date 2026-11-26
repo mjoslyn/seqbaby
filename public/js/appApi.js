@@ -44,7 +44,8 @@ export function installAppApi() {
     // paused replay is, as a starting point; `openFork` opens the studio on
     // one, armed to record a new set from it.
     // The cue (cue.js): this browser's headphone output. `set` takes any of
-    // {mode: "off" | "split" | "multi", pair, level, blend}; `toggle` cues a track.
+    // {mode: "off" | "split" | "multi" | "device", pair, level, blend, sink (an
+    // output device's id, for "device")}; `toggle` cues a track.
     cue: { set: setCue, toggle: toggleCue, clear: clearCues, state: () => ({ ...cueConfig() }) },
     sets: {
       toggle: toggleSetRecord,

@@ -8,6 +8,13 @@
 //           whole rig: nothing but the stereo output every device has.
 //   multi   the mix on outputs 1/2 and the cue on another pair (3/4, 5/6 ...)
 //           of an audio interface with more than two outputs.
+//   device  the mix in stereo on the system's output, the cue on ANOTHER
+//           output device (a second pair of headphones, Bluetooth or not):
+//           the cue bus into a MediaStream, played by an <audio> element
+//           whose sink is that device. Where the browser lets a page choose
+//           one (setSinkId: desktop Chrome and Edge, Firefox). Two devices
+//           are two clocks and, over Bluetooth, a couple of hundred ms: it
+//           is for hearing a sound before it is in the mix, not for timing.
 //
 //   track ─▶ rack.switchGain ─┬─▶ rack.gate ─▶ rack.output ─▶ mix
 //                             └─▶ cue tap ─▶ cue bus ─▶ the cue's output
@@ -27,10 +34,10 @@ import { upgradeKnobs } from "./knob.js";
 import { state } from "./state.js";
 
 const KEY = "seqbaby.cue.v1";
-export const CUE_MODES = ["off", "split", "multi"];
+export const CUE_MODES = ["off", "split", "multi", "device"];
 
 function load() {
-  const d = { mode: "off", pair: 1, level: 0.8, blend: 0 };
+  const d = { mode: "off", pair: 1, level: 0.8, blend: 0, sink: "", sinkLabel: "" };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || "null");
     if (s && typeof s === "object") {
@@ -38,6 +45,8 @@ function load() {
       if (Number.isInteger(s.pair) && s.pair >= 1 && s.pair <= 15) d.pair = s.pair;
       if (Number.isFinite(s.level)) d.level = Math.max(0, Math.min(1, s.level));
       if (Number.isFinite(s.blend)) d.blend = Math.max(0, Math.min(1, s.blend));
+      if (typeof s.sink === "string") d.sink = s.sink.slice(0, 200);
+      if (typeof s.sinkLabel === "string") d.sinkLabel = s.sinkLabel.slice(0, 120);
     }
   } catch {}
   return d;
@@ -94,6 +103,91 @@ function applyCueLevels(now = false) {
   }
 }
 
+// ---- another device --------------------------------------------------------------
+
+/** Whether this browser lets a page send audio to a device of its choosing. */
+export function canPickDevice() {
+  return typeof HTMLMediaElement !== "undefined" && typeof HTMLMediaElement.prototype.setSinkId === "function"
+    && typeof state.audioCtx?.createMediaStreamDestination !== "undefined";
+}
+
+/** @type {null | {dest: MediaStreamAudioDestinationNode, el: HTMLAudioElement, id: string | null}} */
+let sink = null;
+/** The output devices last listed, for the panel. */
+let outputs = [];
+let sinkNote = "";         // why the device is not playing, for the panel
+
+/**
+ * Play the cue bus on the chosen device. The element stays MUTED until the
+ * device has taken it: unpointed, it would play on the system's output, which
+ * is the room the cue is being kept out of.
+ */
+function startSink(n) {
+  const ctx = state.audioCtx;
+  if (!sink) {
+    const dest = ctx.createMediaStreamDestination();
+    const el = new Audio();
+    el.srcObject = dest.stream;
+    el.muted = true;
+    sink = { dest, el, id: null };
+  }
+  try { n.sum.connect(sink.dest); } catch {}
+  const el = sink.el, want = cue.sink;
+  el.muted = true;
+  if (!want) { sinkNote = "pick the device the cue goes to"; return; }
+  sinkNote = "";
+  el.setSinkId(want).then(() => {
+    // the mode, or the device, may have moved on while this was pending
+    if (!sink || cue.mode !== "device" || cue.sink !== want || !speakers) return;
+    sink.id = want;
+    el.muted = false;
+    return el.play();
+  }).catch(() => {
+    if (sink) { sink.id = null; try { el.pause(); } catch {} }
+    sinkNote = `${cue.sinkLabel || "that device"} is not available: connect it, or pick another`;
+    setStatus(`cue: ${sinkNote}`, true);
+  }).finally(() => open?.sync());
+}
+
+function stopSink() {
+  if (!sink) return;
+  sink.el.muted = true;
+  try { sink.el.pause(); } catch {}
+  sink.id = null;
+}
+
+/**
+ * List the output devices. A browser hides their names (and often the devices)
+ * until the page has been allowed a microphone or asked for an output, so
+ * `ask` does whichever this browser has: its own output picker, or a
+ * microphone prompt whose stream is closed at once. Nothing is recorded.
+ */
+export async function findOutputs(ask = false) {
+  const md = navigator.mediaDevices;
+  if (!md?.enumerateDevices) return (outputs = []);
+  const list = async () => (await md.enumerateDevices()).filter((d) => d.kind === "audiooutput");
+  let found = await list().catch(() => []);
+  if (ask && !found.some((d) => d.label)) {
+    if (typeof md.selectAudioOutput === "function") {
+      try {
+        const d = await md.selectAudioOutput();
+        if (d?.deviceId) setCue({ sink: d.deviceId, sinkLabel: d.label || "" });
+      } catch {}
+    } else {
+      try {
+        const s = await md.getUserMedia({ audio: true });
+        for (const t of s.getTracks()) t.stop();
+      } catch {
+        setStatus("cue: the browser lists output devices only after the microphone prompt is allowed (nothing is recorded)", true);
+      }
+    }
+    found = await list().catch(() => []);
+  }
+  // "default" and "communications" are the system's own choices under other names
+  outputs = found.filter((d) => d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications");
+  return outputs;
+}
+
 /** A gain that sums whatever it is fed to `ch` channels, as speakers would. */
 function fold(ctx, ch) {
   const g = ctx.createGain();
@@ -116,10 +210,12 @@ export function wireOutput() {
   for (const n of route) { try { n.disconnect(); } catch {} }
   route = [];
   if (nodes) { try { nodes.sum.disconnect(); } catch {} }
+  stopSink();
   const link = (n) => { out.connect(n); outTo.push(n); };
 
   let mode = cue.mode;
   if (mode === "multi" && maxOutputs() < 4) mode = "off";       // the interface went away
+  if (mode === "device" && !canPickDevice()) mode = "off";
   const stereo = () => {
     try { dest.channelCount = Math.min(2, dest.maxChannelCount); dest.channelCountMode = "explicit"; dest.channelInterpretation = "speakers"; } catch {}
   };
@@ -128,6 +224,13 @@ export function wireOutput() {
 
   const n = ensureNodes();
   link(n.mixG);
+  if (mode === "device") {
+    // the mix as it always was; the cue leaves by another door
+    stereo();
+    link(dest);
+    startSink(n);
+    return;
+  }
   if (mode === "split") {
     stereo();
     const merger = ctx.createChannelMerger(2);
@@ -226,13 +329,20 @@ export function clearCues() {
   try { window.dispatchEvent(new CustomEvent("seqbaby:cue")); } catch {}
 }
 
-/** Change the cue's settings (any of mode, pair, level, blend). */
+/** Change the cue's settings (any of mode, pair, level, blend, sink, sinkLabel). */
 export function setCue(patch = {}) {
   const c = cue;
-  const rewire = ("mode" in patch && patch.mode !== c.mode) || ("pair" in patch && patch.pair !== c.pair);
+  const rewire = ("mode" in patch && patch.mode !== c.mode) || ("pair" in patch && patch.pair !== c.pair)
+    || ("sink" in patch && patch.sink !== c.sink);
+  if ("sink" in patch && typeof patch.sink === "string") {
+    c.sink = patch.sink.slice(0, 200);
+    c.sinkLabel = typeof patch.sinkLabel === "string" ? patch.sinkLabel.slice(0, 120) : (outputs.find((d) => d.deviceId === c.sink)?.label || "");
+  }
   if ("mode" in patch && CUE_MODES.includes(patch.mode)) {
     if (patch.mode === "multi" && state.audioCtx && maxOutputs() < 4) {
       setStatus(`this output has ${maxOutputs()} channels: a cue pair needs an interface with 4 or more. Use split mono, or make the interface the system's output`, true);
+    } else if (patch.mode === "device" && state.audioCtx && !canPickDevice()) {
+      setStatus("this browser cannot send audio to a second device: use split mono, or an interface's second pair", true);
     } else c.mode = patch.mode;
   }
   if ("pair" in patch && Number.isFinite(patch.pair)) c.pair = Math.max(1, Math.min(15, Math.round(patch.pair)));
@@ -277,6 +387,7 @@ export function openCuePanel() {
       <label class="sq-cue__mode"><input type="radio" name="sq-cue-mode" value="off" /><span><b>off</b><i>the mix in stereo, no cue</i></span></label>
       <label class="sq-cue__mode"><input type="radio" name="sq-cue-mode" value="split" /><span><b>split mono</b><i>the mix on the left, the cue on the right. A splitter cable, or one ear each</i></span></label>
       <label class="sq-cue__mode"><input type="radio" name="sq-cue-mode" value="multi" /><span><b>audio interface</b><i>the mix on outputs 1 / 2, the cue on <select class="sq-cue__pair" aria-label="cue outputs"></select></i></span></label>
+      <label class="sq-cue__mode"><input type="radio" name="sq-cue-mode" value="device" /><span><b>another device</b><i>the mix where it plays now, the cue on a second output: other headphones, Bluetooth or not</i><i class="sq-cue__sinkrow"><select class="sq-cue__sink" aria-label="cue device"></select><button type="button" class="sq-btn--ghost sq-cue__find" title="list this computer's output devices. The browser may ask for the microphone first: that is how it agrees to name them, and nothing is recorded">find devices</button></i><i class="sq-cue__sinknote"></i></span></label>
     </div>
     <p class="sq-cue__dev"></p>
     <div class="sq-cue__row">
@@ -289,6 +400,7 @@ export function openCuePanel() {
   document.body.appendChild(overlay);
   const q = (s) => modal.querySelector(s);
   const pairSel = q(".sq-cue__pair");
+  const sinkSel = q(".sq-cue__sink");
   const level = q(".p-cue-level"), blend = q(".p-cue-blend");
 
   const sync = () => {
@@ -311,6 +423,28 @@ export function openCuePanel() {
       : max < 4
         ? `this output has ${max} channels. For a cue pair, make a 4-output (or bigger) interface the system's sound output and reload`
         : `this output has ${max} channels`;
+    // the devices: whatever was last listed, and the chosen one even if it is
+    // not among them (unplugged, or not listed yet)
+    const dev = q('input[value="device"]');
+    const can = !ready || canPickDevice();
+    dev.disabled = !can;
+    sinkSel.disabled = !can;
+    q(".sq-cue__find").disabled = !can;
+    const opts = [["", outputs.length ? "pick a device" : "no devices listed yet"]];
+    for (const d of outputs) opts.push([d.deviceId, d.label || `output ${opts.length}`]);
+    if (c.sink && !outputs.some((d) => d.deviceId === c.sink)) opts.push([c.sink, `${c.sinkLabel || "the chosen device"} (not found)`]);
+    sinkSel.innerHTML = "";
+    for (const [v, text] of opts) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = text;
+      sinkSel.appendChild(o);
+    }
+    sinkSel.value = c.sink;
+    q(".sq-cue__sinknote").textContent = !can
+      ? "this browser cannot send audio to a second device (desktop Chrome, Edge and Firefox can)"
+      : c.mode === "device"
+        ? (sinkNote || (c.sink ? "a second device runs a little behind the mix, more over Bluetooth: for hearing a sound, not for timing" : "pick the device the cue goes to"))
+        : "";
     level.value = String(c.level); blend.value = String(c.blend);
     const n = state.tracks.filter((t) => t._cue).length;
     q(".sq-cue__count").textContent = n ? `${n} cued` : "nothing cued";
@@ -321,7 +455,12 @@ export function openCuePanel() {
     const el = e.target;
     if (el instanceof HTMLInputElement && el.name === "sq-cue-mode") setCue({ mode: el.value });
     else if (el === pairSel) setCue({ pair: Number(pairSel.value) });
+    else if (el === sinkSel) setCue({ sink: sinkSel.value, sinkLabel: sinkSel.selectedOptions[0]?.textContent || "", ...(sinkSel.value ? { mode: "device" } : {}) });
   });
+  q(".sq-cue__find").addEventListener("click", async () => { await findOutputs(true); sync(); });
+  const onDevices = async () => { await findOutputs(false); sync(); };
+  navigator.mediaDevices?.addEventListener?.("devicechange", onDevices);
+  void onDevices();
   level.addEventListener("input", () => setCue({ level: Number(level.value) }));
   blend.addEventListener("input", () => setCue({ blend: Number(blend.value) }));
   q(".sq-cue__clear").addEventListener("click", () => { clearCues(); sync(); });
@@ -332,6 +471,7 @@ export function openCuePanel() {
     if (!open) return;
     document.removeEventListener("keydown", esc);
     window.removeEventListener("seqbaby:cue", onCue);
+    navigator.mediaDevices?.removeEventListener?.("devicechange", onDevices);
     overlay.remove();
     open = null;
   };
