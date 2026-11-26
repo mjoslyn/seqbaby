@@ -123,7 +123,7 @@ test("instrument counts are what picking one more would leave", () => {
 
 test("the query round-trips through the URL, defaults left out", () => {
   assert.equal(queryString(EMPTY_QUERY), "");
-  const full = { q: "acid line", sort: "new", min: 120, max: null, with: ["silverbox", "808"], page: 3 };
+  const full = { q: "acid line", sort: "new", min: 120, max: null, with: ["silverbox", "808"], tagged: ["dub techno"], page: 3 };
   assert.deepEqual(parseQuery(queryString(full)), full);
   assert.deepEqual(parseQuery(""), EMPTY_QUERY);
   assert.deepEqual(parseQuery("?sort=nonsense&bpm=abc-&with=,,"), EMPTY_QUERY);
@@ -148,4 +148,30 @@ test("page numbers: ends, neighbours, and gaps only where a page is skipped", ()
   assert.deepEqual(pageNumbers(4, 10), [1, 2, 3, 4, 5, null, 10]);
   assert.deepEqual(pageNumbers(5, 10), [1, null, 4, 5, 6, null, 10]);
   assert.deepEqual(pageNumbers(10, 10), [1, null, 9, 10]);
+});
+
+test("tags filter like instruments: all picked, counted, capped, and in the URL", async () => {
+  const { tagCounts } = await import("../app/songs/explore.js");
+  const song = (id, tags, instruments = []) => ({ id, title: id, bpm: 120, likes: 0, updatedAt: "2026-01-01T00:00:00Z", instruments, tags });
+  const songs = [song("a", ["acid", "late night"]), song("b", ["acid"]), song("c", []), { ...song("d", undefined), tags: undefined }];
+  const q = (tagged) => ({ ...EMPTY_QUERY, tagged });
+  assert.deepEqual(explore(songs, q(["acid"]), 0).map((s) => s.id).sort(), ["a", "b"]);
+  assert.deepEqual(explore(songs, q(["acid", "late night"]), 0).map((s) => s.id), ["a"]);
+  assert.equal(explore(songs, q([]), 0).length, 4);
+  // a search word finds a tag too
+  assert.deepEqual(explore(songs, { ...EMPTY_QUERY, q: "night" }, 0).map((s) => s.id), ["a"]);
+
+  assert.deepEqual(tagCounts(songs, q([])), [{ name: "acid", count: 2 }, { name: "late night", count: 1 }]);
+  // with one picked, the others count what picking them too would leave; a picked tag nobody has is still listed
+  assert.deepEqual(tagCounts(songs, q(["late night"])), [{ name: "acid", count: 1 }, { name: "late night", count: 1 }]);
+  assert.ok(tagCounts(songs, q(["gone"])).some((c) => c.name === "gone" && c.count === 0));
+  const many = Array.from({ length: 50 }, (_, i) => song(`s${i}`, [`t${String(i).padStart(2, "0")}`]));
+  assert.equal(tagCounts(many, q([]), 10).length, 10);
+  // a picked tag past the cap is never cut
+  assert.equal(tagCounts(many, q(["zz gone"]), 10).length, 11);
+
+  const back = parseQuery(queryString(q(["dub techno", "acid"])));
+  assert.deepEqual(back.tagged, ["dub techno", "acid"]);
+  assert.equal(queryString(q([])), "");
+  assert.deepEqual(parseQuery("?tag=Acid,acid,,").tagged, ["acid"]);
 });

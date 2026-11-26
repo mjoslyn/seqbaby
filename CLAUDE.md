@@ -2652,8 +2652,14 @@ Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track
    retriggers 1–8× when no chord. Sampler opts carry region/fade/loop/
    pitchBase/pitchLock/sampleSpeedMode.
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
-   beat indicator). Metronome fires on quarters when enabled. **The beat dial
-   shows the repeat count under the beat** (`repeatReadout`, beat.js): `2/4`
+   beat indicator). Metronome fires on quarters when enabled. **The beat
+   indicator is a pill** (`#beat-indicator`, a span: `<i>` a fill, `<b>` the
+   label over it; it was an SVG ring of dots): `beat.step` over a fill of how
+   far through the pattern the playhead is (the first track's length), its
+   border lit on a beat and more so on the bar's first step, empty while
+   stopped. The pattern bar's own `3 of 8` repeat meter under `rep` is gone:
+   the pill carries the count. **It shows the repeat count after the beat**
+   (`repeatReadout`, beat.js): `2/4`
    in chain mode or a loop of patterns (the bar of the pattern's repeat
    count), `×3` in repeat mode (how many times the bar has come round since
    the pattern started, from `_countOrigin`), the ruler's bar in arrange mode,
@@ -5207,10 +5213,15 @@ owner types. They are the song's, not a version's.
   own is open, else kept for the save box to offer (`addComposedTags` /
   `suggestSongTags`, suggestName.ts, cleared when another session arrives).
   A turn on a mix deck tags nothing.
-- **The songs explorer searches and shows them** (`exploreFeed.ts` selects
-  the column; `matches` adds them to the haystack; a card draws them dashed,
-  before its instruments). There is no tag chip filter yet, and the homepage
-  feed and profile rows do not show them.
+- **The songs explorer searches, shows and filters by them**
+  (`exploreFeed.ts` selects the column; `matches` adds them to the haystack;
+  a card draws them dashed, before its instruments). A `tagged` chip row
+  works as the instruments' does (`tagCounts`, explore.js): every picked tag
+  must be on a song, a chip's count is what picking it too would leave, and
+  the picks are in the URL (`?tag=dub+techno,acid`, `Query.tagged`). Tags
+  are free text, so only the commonest `TAG_CHIPS` (30) are offered, a
+  picked one always among them. The homepage feed and profile rows do not
+  show tags.
 
 ## Templates — a song you start from (`songs.is_template`)
 

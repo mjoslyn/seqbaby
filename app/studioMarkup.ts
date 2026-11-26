@@ -659,7 +659,7 @@ export const STUDIO_BODY = String.raw`
            lives here, beside the metronome, so on a phone it joins the undo /
            redo / scale / metronome group; the bar itself is hidden there. -->
       <button id="pattern-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="session" type="button" aria-label="session menu" title="open session menu"></button>
-      <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
+      <span id="beat-indicator" class="sq-beat-indicator" aria-hidden="true"></span>
       <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
     </div><!-- /sq-transport__right -->
     <!-- Keyboard-performance cluster: its own full-width line under the transport
@@ -793,7 +793,7 @@ export const STUDIO_BODY = String.raw`
       <option value="5/8">5/8</option>
       <option value="7/8">7/8</option>
     </select></label>
-    <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /><span id="pattern-prog" class="sq-mix__prog sq-pattern__prog" hidden title="the chain: which bar of this pattern's repeat count is playing, and how far through them it is"><i></i><b></b></span></label>
+    <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
 

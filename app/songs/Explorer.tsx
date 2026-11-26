@@ -14,6 +14,7 @@ import {
   paginate,
   parseQuery,
   queryString,
+  tagCounts,
   type Query,
   type SortKey,
 } from "./explore";
@@ -23,7 +24,7 @@ import type { ExploreSong } from "./exploreFeed";
 // is here already, so a search, a sort or a filter is a re-render of what is
 // in memory (explore.js), never a request.
 //
-// The query lives in the URL (`?q=&sort=&bpm=&with=&page=`) so a filtered
+// The query lives in the URL (`?q=&sort=&bpm=&with=&tag=&page=`) so a filtered
 // view, and the page of it you are on, is a link. It is read after mount rather than on the server: the page is cached
 // for everyone (`revalidate` in page.tsx), and reading the query there would
 // make it render per request.
@@ -55,6 +56,8 @@ export default function Explorer({
   const results = useMemo(() => explore(songs, query, now), [songs, query, now]);
   const chips = useMemo(() => (hasInstruments ? instrumentCounts(songs, query) : []), [songs, query, hasInstruments]);
 
+  const tagChips = useMemo(() => tagCounts(songs, query), [songs, query]);
+
   const { page, pages, start, end } = paginate(results.length, query.page);
 
   // Any change but a page turn starts over at page 1: page 4 of a list that
@@ -66,11 +69,13 @@ export default function Explorer({
   };
   const toggle = (name: string) =>
     update({ with: query.with.includes(name) ? query.with.filter((i) => i !== name) : [...query.with, name] });
+  const toggleTag = (name: string) =>
+    update({ tagged: query.tagged.includes(name) ? query.tagged.filter((t) => t !== name) : [...query.tagged, name] });
   const bpmValue = (v: string) => {
     const n = Number.parseInt(v, 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
-  const filtered = query.q.trim() !== "" || query.min != null || query.max != null || query.with.length > 0;
+  const filtered = query.q.trim() !== "" || query.min != null || query.max != null || query.with.length > 0 || query.tagged.length > 0;
 
   return (
     <>
@@ -81,7 +86,7 @@ export default function Explorer({
             type="search"
             value={query.q}
             onChange={(e) => update({ q: e.target.value })}
-            placeholder="search titles, people, instruments"
+            placeholder="search titles, people, instruments, tags"
             aria-label="search songs"
           />
           <label className={styles.sort}>
@@ -154,6 +159,28 @@ export default function Explorer({
                     aria-pressed={on}
                     disabled={!on && count === 0}
                     onClick={() => toggle(name)}
+                  >
+                    {name} <span className={styles.count}>{count}</span>
+                  </button>
+                );
+              })}
+            </span>
+          </div>
+        ) : null}
+        {tagChips.length ? (
+          <div className={styles.row}>
+            <span className={styles.label}>tagged</span>
+            <span className={styles.chips}>
+              {tagChips.map(({ name, count }) => {
+                const on = query.tagged.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    className={styles.chip}
+                    aria-pressed={on}
+                    disabled={!on && count === 0}
+                    onClick={() => toggleTag(name)}
                   >
                     {name} <span className={styles.count}>{count}</span>
                   </button>

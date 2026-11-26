@@ -31,9 +31,11 @@ export function fireMetronome(time, accent) {
   osc.stop(time + 0.1);
 }
 
-// Circular beat indicator — N dots around a ring (N = reference track's length
-// so non-4/4 / polymeter still reads correctly), every 4th is a strong-beat
-// dot, with a "beat.sq-step" text readout in the center (always visible).
+// The beat indicator: a pill in the style of the pattern bar's repeat meter
+// (`3 of 8` over a fill). The label is `beat.step`, with the repeat count
+// after it while playing, over a fill of how far through the pattern the
+// playhead is (the reference track's length, so non-4/4 and polymeter still
+// read correctly). It was a ring of dots; the number is what was being read.
 export function currentIndicatorSteps() {
   const n = state.tracks[0]?.length;
   return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
@@ -42,50 +44,20 @@ export function currentIndicatorMeter() {
   return transportMeter();
 }
 export function buildBeatIndicator() {
-  const svg = document.getElementById("beat-indicator");
-  if (!svg) return;
+  const el = document.getElementById("beat-indicator");
+  if (!el) return;
   const steps = currentIndicatorSteps();
   const meter = currentIndicatorMeter();
   const spb = stepsPerBeatForMeter(meter);
   const sig = `${steps}@${meter.num}/${meter.den}`;
-  if (svg.dataset.sig === sig) return;
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
-  const ns = "http://www.w3.org/2000/svg";
-  const r = 16;
-  for (let i = 0; i < steps; i++) {
-    const ang = (i / steps) * Math.PI * 2 - Math.PI / 2;
-    const cx = Math.cos(ang) * r;
-    const cy = Math.sin(ang) * r;
-    const strong = i % spb === 0;
-    const dot = document.createElementNS(ns, "circle");
-    dot.setAttribute("cx", cx.toFixed(2));
-    dot.setAttribute("cy", cy.toFixed(2));
-    dot.setAttribute("r", strong ? "2.4" : "1.5");
-    dot.classList.add("sq-beat__dot");
-    if (strong) dot.classList.add("is-beat-strong");
-    dot.dataset.idx = String(i);
-    svg.appendChild(dot);
+  if (el.dataset.sig === sig) return;
+  if (!el.querySelector(".sq-beat__label")) {
+    // <i> the fill, <b> what is read over it: the beat, then the repeat count.
+    el.innerHTML = '<i class="sq-beat__fill"></i><b><span class="sq-beat__label">1.1</span><span class="sq-beat__rep"></span></b>';
   }
-  const label = document.createElementNS(ns, "text");
-  label.setAttribute("x", "0");
-  label.setAttribute("y", "0");
-  label.setAttribute("text-anchor", "middle");
-  label.setAttribute("dominant-baseline", "central");
-  label.classList.add("sq-beat__label");
-  label.textContent = "1.1";
-  svg.appendChild(label);
-  // Under it, which repeat the pattern is on (repeatReadout). The beat sits
-  // a little higher while there is one to show (style.css, `has-rep`).
-  const rep = document.createElementNS(ns, "text");
-  rep.setAttribute("x", "0");
-  rep.setAttribute("y", "7");
-  rep.setAttribute("text-anchor", "middle");
-  rep.setAttribute("dominant-baseline", "central");
-  rep.classList.add("sq-beat__rep");
-  svg.appendChild(rep);
-  svg.dataset.sig = sig;
-  svg.dataset.steps = String(steps);
-  svg.dataset.spb = String(spb);
+  el.dataset.sig = sig;
+  el.dataset.steps = String(steps);
+  el.dataset.spb = String(spb);
 }
 
 /**
@@ -114,29 +86,33 @@ export function repeatReadout(barLen) {
 /**
  * @param {number} tick
  * @param {string} [rep] the repeat readout for that tick (the transport's
- *   snapshot); left out, the dial clears it when stopped and keeps it otherwise
+ *   snapshot); left out, the pill clears it when stopped and keeps it otherwise
  */
 export function paintBeatIndicator(tick, rep) {
-  const svg = document.getElementById("beat-indicator");
-  if (!svg) return;
+  const el = document.getElementById("beat-indicator");
+  if (!el) return;
   const wantSig = `${currentIndicatorSteps()}@${currentIndicatorMeter().num}/${currentIndicatorMeter().den}`;
-  if (svg.dataset.sig !== wantSig) buildBeatIndicator();
-  const steps = Number(svg.dataset.steps || 16);
-  const spb = Number(svg.dataset.spb || 4);
+  if (el.dataset.sig !== wantSig) buildBeatIndicator();
+  const steps = Number(el.dataset.steps || 16);
+  const spb = Number(el.dataset.spb || 4);
   const raw = tick == null ? 0 : tick - 1;
   const idx = ((raw % steps) + steps) % steps;
   const beat = Math.floor(idx / spb) + 1;     // 1..num
   const sub  = (idx % spb) + 1;               // 1..stepsPerBeat
-  for (const dot of svg.querySelectorAll(".sq-beat__dot")) {
-    dot.classList.toggle("is-now", Number(dot.dataset.idx) === idx);
-  }
-  const lbl = svg.querySelector(".sq-beat__label");
-  if (lbl) lbl.textContent = `${beat}.${sub}`;
-  const repEl = svg.querySelector(".sq-beat__rep");
+  const text = `${beat}.${sub}`;
+  const lbl = el.querySelector(".sq-beat__label");
+  if (lbl && lbl.textContent !== text) lbl.textContent = text;
+  // Empty while stopped: a fill is a playhead, and nothing is playing.
+  const fill = el.querySelector(".sq-beat__fill");
+  const w = state.playing && tick != null ? `${Math.round(((idx + 1) / steps) * 100)}%` : "0%";
+  if (fill && fill.style.width !== w) fill.style.width = w;
+  // The first step of a beat is lit, the bar's first more so.
+  el.classList.toggle("is-beat", !!state.playing && tick != null && sub === 1);
+  el.classList.toggle("is-bar", !!state.playing && tick != null && idx % (spb * currentIndicatorMeter().num) === 0);
+  const repEl = el.querySelector(".sq-beat__rep");
   if (repEl) {
-    const text = !state.playing ? "" : rep ?? repEl.textContent;
-    if (repEl.textContent !== text) repEl.textContent = text;
-    svg.classList.toggle("has-rep", !!text);
+    const r = !state.playing ? "" : rep ?? repEl.textContent;
+    if (repEl.textContent !== r) repEl.textContent = r;
+    el.classList.toggle("has-rep", !!r);
   }
 }
-

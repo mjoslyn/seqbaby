@@ -31,7 +31,7 @@ import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
-import { copyPattern, installRepeatMeter, openPatternMenu, renderPatternGrid, setPatternMeter, setPatternMode, syncPatternModeUI } from "./patternBar.js";
+import { copyPattern, openPatternMenu, renderPatternGrid, setPatternMeter, setPatternMode, syncPatternModeUI } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
@@ -886,7 +886,6 @@ export function init() {
     copyPattern(state.activePattern, next);
     switchPattern(next);
   });
-  installRepeatMeter();
   document.getElementById("pattern-repeats").addEventListener("change", e => {
     const v = Math.max(1, Math.min(16, Number(e.target.value) || 1));
     e.target.value = v;

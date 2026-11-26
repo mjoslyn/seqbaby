@@ -83,7 +83,7 @@ export function instrumentsOf(keys) {
 /** @typedef {{ handle?: string | null, name?: string | null } | string | null} Owner */
 /** @typedef {{ id: string, title: string, owner?: Owner, bpm: number | null, likes: number, updatedAt: string, instruments: string[], tags?: string[] }} ExploreSong */
 /** @typedef {"hot" | "new" | "liked" | "bpm-up" | "bpm-down" | "title"} SortKey */
-/** @typedef {{ q: string, sort: SortKey, min: number | null, max: number | null, with: string[], page: number }} Query */
+/** @typedef {{ q: string, sort: SortKey, min: number | null, max: number | null, with: string[], tagged: string[], page: number }} Query */
 
 export const SORTS = /** @type {const} */ ([
   ["hot", "on repeat"],
@@ -104,7 +104,11 @@ export const BPM_BANDS = /** @type {const} */ ([
 ]);
 
 /** @type {Query} */
-export const EMPTY_QUERY = { q: "", sort: "hot", min: null, max: null, with: [], page: 1 };
+export const EMPTY_QUERY = { q: "", sort: "hot", min: null, max: null, with: [], tagged: [], page: 1 };
+
+/** How many tag chips are drawn: the commonest, plus any that are picked.
+ *  Tags are whatever people typed, so there is no end to them. */
+export const TAG_CHIPS = 30;
 
 /** Songs per page. */
 export const PAGE_SIZE = 24;
@@ -137,6 +141,7 @@ export function matches(song, query) {
     if (query.max != null && song.bpm > query.max) return false;
   }
   for (const i of query.with) if (!song.instruments.includes(i)) return false;
+  for (const t of query.tagged || []) if (!(song.tags || []).includes(t)) return false;
   return true;
 }
 
@@ -184,13 +189,35 @@ export function instrumentCounts(songs, query) {
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
+/**
+ * The tags to offer as chips, the instruments' way: how many songs the query
+ * would leave if each were picked too, most common first, a picked one always
+ * listed. Capped at `limit` (picked ones are never cut), since tags are
+ * free text and a long tail of one-song tags is not a filter.
+ * @param {ExploreSong[]} songs @param {Query} query @returns {{ name: string, count: number }[]}
+ */
+export function tagCounts(songs, query, limit = TAG_CHIPS) {
+  const picked = query.tagged || [];
+  const counts = new Map();
+  for (const s of songs) for (const t of s.tags || []) if (!counts.has(t)) counts.set(t, 0);
+  for (const t of picked) if (!counts.has(t)) counts.set(t, 0);
+  for (const s of songs) {
+    if (!matches(s, query)) continue;
+    for (const t of s.tags || []) counts.set(t, counts.get(t) + 1);
+  }
+  const all = [...counts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return all.filter((c, i) => i < limit || picked.includes(c.name));
+}
+
 const bound = (v) => {
   const n = Number.parseInt(String(v ?? ""), 10);
   return Number.isFinite(n) && n > 0 && n < 1000 ? n : null;
 };
 
 /**
- * A query from a URL's search string: `?q=acid&sort=new&bpm=120-135&with=silverbox,808`.
+ * A query from a URL's search string: `?q=acid&sort=new&bpm=120-135&with=silverbox,808&tag=dub+techno`.
  * Anything unreadable is left at its default, never thrown on.
  * @param {string} search @returns {Query}
  */
@@ -208,6 +235,8 @@ export function parseQuery(search) {
     min: bound(lo),
     max: bound(hi),
     with: [...new Set(picked)],
+    // A tag never holds a comma (lib/songTags.js), so a comma can separate them.
+    tagged: [...new Set(String(p.get("tag") || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean))].slice(0, 8),
     page: bound(p.get("page")) ?? 1,
   };
 }
@@ -220,6 +249,7 @@ export function queryString(query) {
   if (query.sort !== "hot") p.set("sort", query.sort);
   if (query.min != null || query.max != null) p.set("bpm", `${query.min ?? ""}-${query.max ?? ""}`);
   if (query.with.length) p.set("with", query.with.join(","));
+  if (query.tagged?.length) p.set("tag", query.tagged.join(","));
   if (query.page > 1) p.set("page", String(query.page));
   const s = p.toString();
   return s ? `?${s}` : "";

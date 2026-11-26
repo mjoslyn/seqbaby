@@ -863,7 +863,6 @@ a.bylineLike { text-decoration: none; }
   .manualLink { width: 44px; height: 44px; }
   .helpItem { padding: 12px; font-size: 14px; }
   .beatSlot { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
-  .beatSlot svg { width: 36px; height: 36px; }
   .menuBtn {
     display: inline-flex;
     justify-content: center;
