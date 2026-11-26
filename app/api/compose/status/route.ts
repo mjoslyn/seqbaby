@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     ...(p.status === "running" && p.hear ? { hear: p.hear } : {}),
     events: p.events ?? [],
     ...(p.status === "done"
-      ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings, title: p.title ?? null, ms: p.ms }
+      ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings, title: p.title ?? null, genre: p.genre ?? null, ms: p.ms }
       : {}),
     ...(p.status === "error" ? { error: p.error } : {}),
   });

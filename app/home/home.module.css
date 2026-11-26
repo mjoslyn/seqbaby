@@ -264,6 +264,8 @@
 /* A patch card's picture: the phrase its play button plays (PatchRoll.tsx),
    over dim step lanes. */
 .rollLane { fill: var(--step); opacity: 0.35; }
+/* A tag the owner gave the song, beside the instruments it is made of. */
+.songTag { color: var(--fg, #e8e8ea); border-style: dashed; }
 .engineTag {
   color: var(--accent);
   border: 1px solid var(--border);

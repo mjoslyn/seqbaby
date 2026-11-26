@@ -25,6 +25,8 @@ export type SongListItem = {
   is_default_template: boolean;
   /** The step preview (app/songs/songPreview.js), written with the song. */
   preview?: unknown;
+  /** Genres and anything else the owner tagged it (lib/songTags.js). */
+  tags: string[];
 };
 
 /** A node of a song's version tree. Never carries `data` -- the list is drawn
@@ -57,6 +59,8 @@ export async function saveSong(input: {
   /** What to call the version this save appends ("compose" for the compose
    *  panel's autosave). */
   label?: string | null;
+  /** The song's tags. Left out, an existing song keeps the ones it has. */
+  tags?: string[];
 }): Promise<{
   id?: string;
   title?: string;
@@ -67,6 +71,18 @@ export async function saveSong(input: {
 }> {
   const { env, userId } = await who();
   return songs.saveSong(env, userId, input);
+}
+
+/** Replace a song of your own's tags. */
+export async function setSongTags(id: string, tags: string[]): Promise<{ ok?: boolean; tags?: string[]; error?: string }> {
+  const { env, userId } = await who();
+  return songs.setSongTags(env, userId, id, tags);
+}
+
+/** Add tags to a song of your own, keeping the ones it has. */
+export async function addSongTags(id: string, tags: string[]): Promise<{ ok?: boolean; tags?: string[]; error?: string }> {
+  const { env, userId } = await who();
+  return songs.addSongTags(env, userId, id, tags);
 }
 
 /** Remix a public (or owned) song into the current user's account. */
@@ -86,6 +102,7 @@ export async function saveNamedSong(input: {
   parentVersionId?: string | null;
   titleGenerated?: boolean;
   fromTemplateId?: string | null;
+  tags?: string[];
 }): Promise<{
   id?: string;
   title?: string;

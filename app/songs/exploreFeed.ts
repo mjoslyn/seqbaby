@@ -2,6 +2,7 @@ import { cfEnv } from "@/lib/cf";
 import { all, json } from "@/lib/data/db.js";
 import { named, owners, type FeedSong, type Row } from "../home/feed";
 import { instrumentsOf } from "./explore";
+import { normalizeTags } from "@/lib/songTags.js";
 
 // What the songs explorer (/songs) starts from: the newest published songs,
 // each with what the page searches, sorts and filters on. Read once per
@@ -15,6 +16,8 @@ import { instrumentsOf } from "./explore";
 export type ExploreSong = FeedSong & {
   /** The instruments it is made of (explore.js `instrumentOf`), sorted. */
   instruments: string[];
+  /** What its owner tagged it: a genre, or anything (lib/songTags.js). */
+  tags?: string[];
 };
 
 /** How many of the newest published songs the explorer holds. Enough to be
@@ -31,7 +34,7 @@ export async function loadExplore(): Promise<ExploreCatalog> {
     const db = (await cfEnv()).DB;
     const rows: Row[] = await all(
       db,
-      `select s.id, s.title, s.share_slug, s.updated_at, s.owner_id, s.bpm, s.preview, s.engines,
+      `select s.id, s.title, s.share_slug, s.updated_at, s.owner_id, s.bpm, s.preview, s.engines, s.tags,
               (select count(*) from song_likes l where l.song_id = s.id) as likes
          from songs s where s.is_public = 1 and s.share_slug is not null
         order by s.updated_at desc limit ?1`,
@@ -52,6 +55,7 @@ export async function loadExplore(): Promise<ExploreCatalog> {
       owner: byId.get(r.owner_id as string) ?? null,
       preview: json(r.preview),
       instruments: instrumentsOf(json(r.engines, [])),
+      tags: normalizeTags(json(r.tags, [])),
     }));
     return { songs, hasInstruments: true, now };
   } catch {

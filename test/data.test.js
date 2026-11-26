@@ -389,3 +389,33 @@ test("a fork names a set the caller could read, and a bad recording is refused",
   assert.equal(env.DB.sqlite.prepare("select count(*) as n from sets where owner_id = ?").get(alice).n, 0);
   assert.equal((await sets.setMeta(env, bob, fork.id)).forkedFrom, null);
 });
+
+test("a song's tags are its owner's to set, normalized, and travel with a remix", async () => {
+  const { env, alice, bob } = await world();
+  const made = await songs.saveSong(env, alice, { title: "tagged", data: { bpm: 120, tracks: [] }, tags: ["Dub Techno", "#late night", "dub  techno", ""] });
+  const list = async (who) => (await songs.listSongs(env, who)).songs;
+  assert.deepEqual((await list(alice))[0].tags, ["dub techno", "late night"]);
+
+  // a save that names no tags (the quick save) keeps them; one that does replaces them
+  await songs.saveSong(env, alice, { id: made.id, title: "tagged", data: { bpm: 121, tracks: [] } });
+  assert.deepEqual((await list(alice))[0].tags, ["dub techno", "late night"]);
+  await songs.saveSong(env, alice, { id: made.id, title: "tagged", data: { bpm: 122, tracks: [] }, tags: ["acid"] });
+  assert.deepEqual((await list(alice))[0].tags, ["acid"]);
+
+  // adding (a kept compose turn) never removes; setting replaces
+  assert.deepEqual((await songs.addSongTags(env, alice, made.id, ["Acid", "techno"])).tags, ["acid", "techno"]);
+  assert.deepEqual((await songs.setSongTags(env, alice, made.id, ["one", "two"])).tags, ["one", "two"]);
+
+  // nobody else, and nobody signed out
+  assert.ok((await songs.setSongTags(env, bob, made.id, ["mine now"])).error);
+  assert.ok((await songs.addSongTags(env, bob, made.id, ["mine now"])).error);
+  assert.ok((await songs.setSongTags(env, null, made.id, ["x"])).error);
+  assert.deepEqual((await list(alice))[0].tags, ["one", "two"]);
+
+  // saving by name with tags, and a remix of a public song keeps what it is
+  await songs.saveNamedSong(env, alice, { title: "named", data: { bpm: 90, tracks: [] }, isPublic: true, tags: ["lo-fi"] });
+  const named = (await list(alice)).find((s) => s.title === "named");
+  assert.deepEqual(named.tags, ["lo-fi"]);
+  const remix = await songs.remixSong(env, bob, named.id);
+  assert.deepEqual((await list(bob)).find((s) => s.id === remix.id).tags, ["lo-fi"]);
+});

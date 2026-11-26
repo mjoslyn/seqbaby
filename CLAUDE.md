@@ -102,11 +102,13 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   ├── data/composeTurns.js   how each turn went and whether it was kept (compose_turns)
+│   ├── songTags.js            a song's tags as stored: one spelling per tag, distinct, at most eight
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 share put/get for the legacy static server (in memory)
 ├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares;
 │                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets;
-│                              0004_compose_critic.sql: the critic's columns on compose_turns)
+│                              0004_compose_critic.sql: the critic's columns on compose_turns;
+│                              0005_song_tags.sql: songs.tags)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -5172,6 +5174,43 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   its sampler tracks load empty. The engine and the session format know
   nothing about it. Keyed by song, so samples go with their song and are
   readable exactly when it is; a remix gets copies.
+
+## Song tags (`songs.tags`, `lib/songTags.js`, `app/TagInput.tsx`)
+
+A song carries tags: a genre from the compose panel's list, or anything its
+owner types. They are the song's, not a version's.
+
+- **Stored as a JSON array on the row** (`songs.tags`, default `[]`), like
+  `engines`, and read with the lists (`LIST_COLS`), never from `data`.
+- **One spelling per tag** (`normalizeTag`, pure and tested): lowercase,
+  single spaces, no `#` or comma, 32 characters; a list is distinct, in the
+  order given, at most eight (`normalizeTags`). The data layer normalizes on
+  every write, so nothing a client sends is stored as sent.
+- **Who writes them** (lib/data/songs.js, owner only, held by
+  `test/data.test.js`): a first save (`saveSong` / `saveNamedSong` take
+  `tags`), `setSongTags` (replace: the songs menu) and `addSongTags` (merge,
+  never removing: a kept compose turn). **A save that names no tags leaves
+  them alone**: the quick save and the compose autosave send none, and
+  `tags: []` is the only way a save clears them. A remix copies its source's.
+- **The field is `TagInput`**: chips and an input whose suggestions are the
+  153 genre names (a native `datalist`, so no popup inside a popup). Enter
+  or a comma ends a tag, backspace in an empty field takes the last back,
+  and what is typed when the field loses focus becomes a tag. In the save
+  box (both the first save and `save new`), and under a songs-menu row
+  behind its `#` button, where each change is written at once.
+- **A composed song tags itself.** A turn's genre is the picker's own when
+  the genre tab built the prompt (`meta.genre`), else what the model said:
+  `name_song` takes an optional `genre`, resolved to the picker's name for
+  it when it is a listed genre (`genreTag`, tools.mjs) and handed back as
+  the job's `genre`. It rides on the review bar's proposal (`tags`) and
+  lands on `keep`: added to the open song's tags when one of the account's
+  own is open, else kept for the save box to offer (`addComposedTags` /
+  `suggestSongTags`, suggestName.ts, cleared when another session arrives).
+  A turn on a mix deck tags nothing.
+- **The songs explorer searches and shows them** (`exploreFeed.ts` selects
+  the column; `matches` adds them to the haystack; a card draws them dashed,
+  before its instruments). There is no tag chip filter yet, and the homepage
+  feed and profile rows do not show them.
 
 ## Templates — a song you start from (`songs.is_template`)
 

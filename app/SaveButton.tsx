@@ -11,7 +11,8 @@ import { saveNamedSong, saveSong } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
 import { generateSongName } from "@/app/songs/songName";
-import { suggestSongName } from "@/app/songs/suggestName";
+import { suggestSongName, suggestSongTags } from "@/app/songs/suggestName";
+import TagInput from "@/app/TagInput";
 import {
   getOpenSong,
   setOpenSong,
@@ -45,6 +46,9 @@ export default function SaveButton() {
   const [asNew, setAsNew] = useState(false);
   const [title, setTitle] = useState("");
   const [isPublic, setIsPublic] = useState(false);
+  // The new song's tags: a genre, or anything typed. Offered from a kept
+  // compose turn's genre when there is one.
+  const [tags, setTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
@@ -63,6 +67,7 @@ export default function SaveButton() {
   // name the user typed -- only the first is the app's to disambiguate.
   const suggestedRef = useRef("");
   const offeredRef = useRef(false);
+  const tagsOfferedRef = useRef(false);
   const openSong = useSyncExternalStore(
     subscribeOpenSong,
     getOpenSong,
@@ -79,7 +84,13 @@ export default function SaveButton() {
   useEffect(() => {
     if (!open) {
       offeredRef.current = false;
+      tagsOfferedRef.current = false;
       return;
+    }
+    if (!tagsOfferedRef.current) {
+      tagsOfferedRef.current = true;
+      const offered = asNew ? [] : suggestSongTags();
+      if (offered.length) setTags((cur) => (cur.length ? cur : offered));
     }
     if (offeredRef.current || title) return;
     offeredRef.current = true;
@@ -99,6 +110,10 @@ export default function SaveButton() {
   useEffect(() => {
     if (!openSong.title || openSong.isTemplate) setTitle("");
   }, [openSong.title, openSong.isTemplate]);
+
+  // The tags were for the session that was here: a different song arriving
+  // (opened, `new`, the one just saved) starts the box empty again.
+  useEffect(() => { setTags([]); }, [openSong.id]);
 
   useEffect(() => {
     if (window.seqbaby) return setReady(true);
@@ -156,6 +171,9 @@ export default function SaveButton() {
       parentVersionId: sameSong ? openSong.versionId : undefined,
       titleGenerated: generated,
       fromTemplateId: openSong.isTemplate ? openSong.id : undefined,
+      // Only when there are some: saving under an existing song's name must
+      // not clear the tags that song has.
+      ...(tags.length ? { tags } : {}),
     }));
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
@@ -201,6 +219,7 @@ export default function SaveButton() {
   }, [
     title,
     isPublic,
+    tags,
     openSong.id,
     openSong.title,
     openSong.versionId,
@@ -220,7 +239,7 @@ export default function SaveButton() {
     const data = window.seqbaby.serializeSet();
     const now = getOpenSong();
     const t = title.trim() || now.title.trim() || generateSongName(data);
-    const res = await trySave(data, () => saveSong({ title: t, data, titleGenerated: true }));
+    const res = await trySave(data, () => saveSong({ title: t, data, titleGenerated: true, tags }));
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
     markSaved(data);
@@ -231,7 +250,7 @@ export default function SaveButton() {
     setAsNew(false);
     setStatus({ text: "" });
     showFlash({ text: `saved \u201c${saved}\u201d` }, 4000);
-  }, [saving, title, showFlash]);
+  }, [saving, title, tags, showFlash]);
 
   // A song of your own is open: its next version, no questions. By id rather
   // than by title, so it lands on this song whatever the field last held.
@@ -317,6 +336,7 @@ export default function SaveButton() {
               if (e.key === "Escape") { setOpen(false); setAsNew(false); }
             }}
           />
+          <TagInput tags={tags} onChange={setTags} disabled={saving} />
           <div className={styles.treeHint}>
             a separate song with its own history. &ldquo;{openSong.title}&rdquo;
             stays as it is; a name already taken gets a number.
@@ -348,6 +368,7 @@ export default function SaveButton() {
               if (e.key === "Enter") save();
             }}
           />
+          <TagInput tags={tags} onChange={setTags} disabled={saving} />
           <label className={styles.checkRow}>
             <input
               type="checkbox"

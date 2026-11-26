@@ -17,6 +17,7 @@ import {
   remixSong,
   setSongTemplate,
   setDefaultTemplate,
+  setSongTags,
   type SongListItem,
 } from "@/app/songs/actions";
 import {
@@ -28,6 +29,7 @@ import {
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
+import TagInput from "@/app/TagInput";
 import { adoptRemix } from "@/app/songs/adoptRemix";
 import { trySave } from "@/app/songs/trySave";
 import { confirmOpen, markSaved } from "@/app/songs/confirmDiscard";
@@ -64,6 +66,8 @@ export default function SongsMenu() {
   // "loading" rather than "no saved songs yet" while it is in flight.
   const [loaded, setLoaded] = useState(false);
   const [treeFor, setTreeFor] = useState<string | null>(null);
+  // The song whose tags are being edited, under its row.
+  const [tagsFor, setTagsFor] = useState<string | null>(null);
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
   });
@@ -274,6 +278,23 @@ export default function SongsMenu() {
     [currentId, treeFor, refresh],
   );
 
+  // A tag added or removed is written at once: the row shows it first, and
+  // the list is read again only if the write did not take.
+  const doSetTags = useCallback(
+    async (song: SongListItem, tags: string[]) => {
+      setSongs((list) => list.map((s) => (s.id === song.id ? { ...s, tags } : s)));
+      const res = await setSongTags(song.id, tags);
+      if (res.error) {
+        setStatus({ text: res.error, err: true });
+        void refresh();
+      } else if (res.tags) {
+        const saved = res.tags;
+        setSongs((list) => list.map((s) => (s.id === song.id ? { ...s, tags: saved } : s)));
+      }
+    },
+    [refresh],
+  );
+
   const doRemix = useCallback(
     async (song: SongListItem) => {
       // A remix of another song is loaded over this one (adoptRemix), so ask
@@ -460,6 +481,15 @@ export default function SongsMenu() {
           <IconHistory />
         </button>
         <button
+          className={`${styles.iconBtn} ${tagsFor === song.id ? styles.iconBtnOn : ""}`}
+          onClick={() => setTagsFor((id) => (id === song.id ? null : song.id))}
+          title={song.tags?.length ? `tags: ${song.tags.join(", ")}. click to edit` : "tag it: a genre, or anything"}
+          aria-expanded={tagsFor === song.id}
+          aria-label="tags"
+        >
+          <span aria-hidden style={{ fontWeight: 700 }}>#</span>
+        </button>
+        <button
           className={styles.iconBtn}
           onClick={() => doRemix(song)}
           title="remix into a new song"
@@ -486,6 +516,17 @@ export default function SongsMenu() {
           <IconTrash />
         </button>
       </div>
+      {tagsFor === song.id ? (
+        <div className={styles.songRowTagsEdit}>
+          <TagInput tags={song.tags ?? []} onChange={(next) => doSetTags(song, next)} autoFocus />
+        </div>
+      ) : song.tags?.length ? (
+        <div className={styles.songRowTags}>
+          {song.tags.map((t) => (
+            <span key={t} className={styles.tagChip}>{t}</span>
+          ))}
+        </div>
+      ) : null}
       {song.preview ? (
         <button
           type="button"

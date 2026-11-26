@@ -67,6 +67,8 @@ export type ComposeProgress = {
   warnings?: unknown;
   /** The name the turn gave the song, if any. */
   title?: string | null;
+  /** The genre it said the song is, as a tag. */
+  genre?: string | null;
   ms?: number;
   error?: string;
   /** The alarm has begun the turn: a retried alarm must not run it twice. */
@@ -229,6 +231,7 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
         changed: out.changed,
         warnings: out.warnings,
         title: out.title ?? null,
+        genre: out.genre ?? null,
         ms: out.ms,
       });
       await this.record(id, { status: "done", model: out.model, changed: out.changed, ms: out.ms, stats: out.stats });

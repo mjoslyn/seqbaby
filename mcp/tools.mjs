@@ -49,6 +49,16 @@ export function guideText() {
   return raw.replace(/^---[\s\S]*?---\s*/, "");
 }
 
+/** A genre as a song tag: the picker's own name for it when it is one of the
+ *  listed genres (by id, name or alias), else the words as given. */
+export function genreTag(raw) {
+  const said = String(raw || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!said) return null;
+  const hit = genreById(said.replace(/ /g, "-")) || searchGenres(said)
+    .find((g) => g.name.toLowerCase() === said || (g.tags || []).some((a) => String(a).toLowerCase() === said));
+  return (hit ? hit.name : said).toLowerCase().slice(0, 32);
+}
+
 /** What the exported JSON is and the conventions the tools use. No
  *  SEQBABY_URL-specific lines here -- those are added where the caller knows
  *  which studio it's talking to (server.mjs's resource, the compose route's
@@ -110,8 +120,12 @@ export const TOOLS = [
   {
     name: "name_song", title: "Name song",
     description: "Give the song its name: two or three lowercase words that say what it sounds like (\"cold squelch\", \"basement choir\"), not the genre alone. Offered in the save box when the song has not been saved yet.",
-    inputSchema: { name: z.string().min(1).max(60) },
-    handler: (ctx, { name }) => { ctx.songName = name.trim().replace(/\s+/g, " ").slice(0, 60); return { name: ctx.songName }; },
+    inputSchema: { name: z.string().min(1).max(60), genre: z.string().max(40).optional().describe("the song's genre, in a word or two (\"dub techno\", \"lo-fi hip hop\"): it becomes the song's tag") },
+    handler: (ctx, { name, genre }) => {
+      ctx.songName = name.trim().replace(/\s+/g, " ").slice(0, 60);
+      if (genre) ctx.songGenre = genreTag(genre);
+      return { name: ctx.songName, ...(ctx.songGenre ? { genre: ctx.songGenre } : {}) };
+    },
   },
   {
     name: "set_tempo", title: "Set tempo", description: "Tempo in bpm (20..300) and swing (0..1).",

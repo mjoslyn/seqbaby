@@ -81,7 +81,7 @@ export function instrumentsOf(keys) {
 }
 
 /** @typedef {{ handle?: string | null, name?: string | null } | string | null} Owner */
-/** @typedef {{ id: string, title: string, owner?: Owner, bpm: number | null, likes: number, updatedAt: string, instruments: string[] }} ExploreSong */
+/** @typedef {{ id: string, title: string, owner?: Owner, bpm: number | null, likes: number, updatedAt: string, instruments: string[], tags?: string[] }} ExploreSong */
 /** @typedef {"hot" | "new" | "liked" | "bpm-up" | "bpm-down" | "title"} SortKey */
 /** @typedef {{ q: string, sort: SortKey, min: number | null, max: number | null, with: string[], page: number }} Query */
 
@@ -129,7 +129,7 @@ const words = (s) =>
 export function matches(song, query) {
   const o = song.owner;
   const who = typeof o === "string" ? o : o ? `${o.handle ?? ""} ${o.name ?? ""}` : "";
-  const hay = `${song.title} ${who} ${song.instruments.join(" ")}`.toLowerCase();
+  const hay = `${song.title} ${who} ${song.instruments.join(" ")} ${(song.tags || []).join(" ")}`.toLowerCase();
   for (const w of words(query.q)) if (!hay.includes(w.replace(/^@/, ""))) return false;
   if (query.min != null || query.max != null) {
     if (song.bpm == null) return false;

@@ -155,6 +155,7 @@ export function newCtx(session) {
   return {
     song: session && typeof session === "object" ? sb.fromBlob(session) : sb.newSong(),
     songName: null,
+    songGenre: null,
   };
 }
 
@@ -291,7 +292,7 @@ export async function runComposeTurn({
 
   const messages = [
     ...recent.map((h) => ({ role: h.role, content: h.text })),
-    { role: "user", content: unnamed ? `${message}\n\n(This song has no name yet. Once you know what it is, give it one with name_song.)` : message },
+    { role: "user", content: unnamed ? `${message}\n\n(This song has no name yet. Once you know what it is, give it one with name_song, and say its genre there too.)` : message },
   ];
 
   let reply = "";
@@ -451,6 +452,8 @@ export async function runComposeTurn({
     changed: after !== before,
     // The name the turn gave the song, if it gave one.
     title: ctx.songName || null,
+    // And the genre it said the song is, as a tag for it.
+    genre: ctx.songGenre || null,
     warnings: sb.validate(ctx.song).warnings,
     // How the turn went, in numbers: kept with its record so one change to
     // the guide or the model can be told from another.

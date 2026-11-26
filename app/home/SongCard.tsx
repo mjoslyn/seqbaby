@@ -35,10 +35,13 @@ function Fingerprint({ id }: { id: string }) {
 export default function SongCard({
   song,
   instruments,
+  tags,
 }: {
   song: FeedSong;
   /** Drawn as tags under the title when given (the explorer). */
   instruments?: string[];
+  /** The owner's own tags (a genre, or anything), drawn before those. */
+  tags?: string[];
 }) {
   return (
     <li className={styles.card}>
@@ -51,9 +54,14 @@ export default function SongCard({
         </span>
         <span className={styles.cardTitle}>{song.title}</span>
       </a>
-      {instruments?.length ? (
+      {instruments?.length || tags?.length ? (
         <span className={styles.cardTags}>
-          {instruments.map((i) => (
+          {(tags ?? []).map((t) => (
+            <span key={`#${t}`} className={`${styles.engineTag} ${styles.songTag}`}>
+              {t}
+            </span>
+          ))}
+          {(instruments ?? []).map((i) => (
             <span key={i} className={styles.engineTag}>
               {i}
             </span>

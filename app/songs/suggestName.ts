@@ -1,6 +1,7 @@
 "use client";
 
 import { generateSongName } from "@/app/songs/songName";
+import { normalizeTags } from "@/lib/songTags.js";
 
 // The name a save field offers for a session that has never been saved.
 //
@@ -21,15 +22,33 @@ import { generateSongName } from "@/app/songs/songName";
 // different session arrives (opened, a share link, `new`), so it never names
 // someone else's song.
 let composedTitle: string | null = null;
+// The same for its tags: a kept turn's genre, offered in the save box of a
+// session that has no song to put it on yet.
+let composedTags: string[] = [];
 let listening = false;
+
+function listen(): void {
+  if (listening || typeof window === "undefined") return;
+  listening = true;
+  const clear = () => { composedTitle = null; composedTags = []; };
+  window.addEventListener("seqbaby:newset", clear);
+  window.addEventListener("seqbaby:setapplied", clear);
+}
 
 export function setComposedTitle(title: string | null): void {
   composedTitle = title && title.trim() ? title.trim().slice(0, 60) : null;
-  if (listening || typeof window === "undefined") return;
-  listening = true;
-  const clear = () => { composedTitle = null; };
-  window.addEventListener("seqbaby:newset", clear);
-  window.addEventListener("seqbaby:setapplied", clear);
+  listen();
+}
+
+/** Add a kept turn's tags to what the save box will offer. */
+export function addComposedTags(tags: string[]): void {
+  composedTags = normalizeTags([...composedTags, ...tags]);
+  listen();
+}
+
+/** The tags a save box starts with for a session never saved. */
+export function suggestSongTags(): string[] {
+  return [...composedTags];
 }
 
 export function suggestSongName(): string {

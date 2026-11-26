@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
-import { setComposedTitle } from "@/app/songs/suggestName";
+import { addComposedTags, setComposedTitle } from "@/app/songs/suggestName";
+import { genreById } from "@/app/songs/genres";
+import { normalizeTags } from "@/lib/songTags.js";
 import GroovePicker from "@/app/GroovePicker";
-import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
+import { addSongTags, loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
@@ -85,6 +87,8 @@ type Proposal = {
   session: unknown;
   before: unknown | null;
   title?: string | null;
+  /** The turn's genre, as tags the song gets when the changes are kept. */
+  tags?: string[];
   note?: string;
   /** What the turn changed, for the card. */
   changes?: Diff;
@@ -123,6 +127,8 @@ type JobStatus = {
   warnings?: string[];
   /** The name the turn gave the song, when it was asked to (unsaved). */
   title?: string | null;
+  /** The genre it said the song is. */
+  genre?: string | null;
   error?: string;
 };
 
@@ -752,8 +758,11 @@ export default function ComposeChat({
       // makes them the song. Writing a turn straight in is what used to
       // silence a track that was playing while you asked for another one.
       const changes = job.session && job.changed !== false ? diffSessions(session, job.session) : undefined;
+      // The song's genre, as its tag: the picker's own when it built the
+      // prompt, else what the turn said the song is.
+      const tags = normalizeTags([(meta?.genre && (genreById(meta.genre) as { name?: string } | undefined)?.name) || job.genre || ""]);
       if (job.session && job.changed !== false) {
-        setReview({ session: job.session, before: null, title: job.title ?? null, changes, job: ref, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
+        setReview({ session: job.session, before: null, title: job.title ?? null, tags, changes, job: ref, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
       // the song's at once; otherwise it comes with the changes, on keep.
@@ -934,13 +943,21 @@ export default function ComposeChat({
     // After the write: an applySet fallback announces a new session, which
     // clears any name held for the last one.
     if (r.title) setComposedTitle(r.title);
+    // Its genre goes on the song: at once when one of the account's own is
+    // open (added to its tags, never replacing them), else into what the save
+    // box will offer when the song is first saved.
+    if (r.tags?.length) {
+      const now = getOpenSong();
+      if (signedIn && now.id && !now.isTemplate) void addSongTags(now.id, r.tags).catch(() => {});
+      else addComposedTags(r.tags);
+    }
     setReview((cur) => (cur && cur.session === r.session ? null : cur));
     // Keeping is the end of the conversation's business with this turn: the
     // drawer goes, and what the save did is said in the studio's status line
     // (the effect on saveNote below), where it is still seen.
     setOpen(false);
     void autosaveKept();
-  }, [review, writeLive, autosaveKept, writeDeckB, deckGone, audition]);
+  }, [review, writeLive, autosaveKept, writeDeckB, deckGone, audition, signedIn]);
 
   const discardChanges = useCallback(() => {
     const r = review;

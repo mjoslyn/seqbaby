@@ -1023,3 +1023,29 @@ a.bylineLike { text-decoration: none; }
 @media (display-mode: standalone) {
   .topBar { padding-top: max(6px, calc(env(safe-area-inset-top) + min(env(safe-area-inset-top), 40px))); }
 }
+
+/* A song's tags: chips and the field that adds one (TagInput.tsx), and the
+   read-only chips on a songs-menu row. */
+.tagBox {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 4px 6px; margin-bottom: 8px;
+  border: 1px solid #2a2d35; border-radius: 6px; background: #14161b;
+}
+.tagBox:focus-within { border-color: #6ee7b7; }
+.tagChip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px; border-radius: 999px;
+  background: #22252c; color: #cbd5e1; font-size: 11px; line-height: 1.6; white-space: nowrap;
+}
+.tagChipX { border: 0; background: none; color: #6b7280; cursor: pointer; padding: 0 1px; font: inherit; line-height: 1; }
+.tagChipX:hover { color: #f87171; }
+.tagField {
+  flex: 1 1 80px; min-width: 80px; border: 0; outline: none; background: none;
+  color: #e8e8ea; font: inherit; font-size: 12px; padding: 3px 2px;
+}
+.songRowTags { display: flex; flex-wrap: wrap; gap: 4px; margin: -2px 0 4px; }
+.songRowTagsEdit { margin: 0 0 4px; }
+@media (max-width: 768px) {
+  .tagField { font-size: 14px; padding: 6px 2px; }
+  .tagChip { font-size: 12px; }
+}
