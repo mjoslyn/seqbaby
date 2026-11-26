@@ -36,14 +36,14 @@ import { applySessionPatch, diffSession } from "./jamSync.js";
 import { deepCopy, mergeSet } from "./liveSet.js";
 import { onMacroGesture, playMacroGesture } from "./macro.js";
 import {
-  captureMixRuntime, deckReady, ejectDeckB, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB,
+  addMasterBus, masterBus, removeMasterBus, captureMixRuntime, deckReady, ejectDeckB, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB,
   mixDecks, onMixEvent, promoteDeckById, restoreMixRuntime, serializeDeckB,
 } from "./mix.js";
 import { trackForControl } from "./paramTargets.js";
 import { setPatternMode } from "./patternBar.js";
-import { applySet, serializeSet } from "./session.js";
+import { applySet, applyTrackPatch, serializeSet, serializeTrackPatch } from "./session.js";
 import { SET_FORMAT, applyPerf, diffPerf, eventIndexAt, secondsAtStep } from "./setFormat.js";
-import { refreshNoiseBeds, releaseSilencedTracks } from "./signal.js";
+import { refreshNoiseBeds, releaseSilencedTracks, setTrackMasterFeed, trackFeedAmount } from "./signal.js";
 import { paintTrackSlotBadge, state, trackSlot } from "./state.js";
 import { announceClips, launchClip } from "./clips.js";
 import { setStepHook, startPlayback, stopPlayback } from "./transport.js";
@@ -87,6 +87,9 @@ function capturePerf() {
       mute: !!t.muted,
       solo: !!t.soloed,
     };
+    // a deck's wet / dry into the master fx bus (the track that owns the feed)
+    const fx = trackFeedAmount(t);
+    if (fx != null) tracks[ref].fx = fx;
   }
   const mix = captureMixRuntime();
   const decks = mix ? mix.decks : null;
@@ -98,6 +101,7 @@ function capturePerf() {
     mode: state.patternMode,
     view: state.view,
     fill: !!state.fill,          // the fill button (perform.js), held or latched
+    master: !!masterBus(),       // the master fx bus on the desk (mix.js)
     tracks, mix, decks,
   };
 }
@@ -141,6 +145,9 @@ function restorePerf(p, at) {
   if (!p) return;
   let silence = false;
   let repaint = false;
+  // The master fx bus first: its own track ("master") is among the refs below.
+  // A set recorded before it was sampled has no `master`, and leaves it alone.
+  if ("master" in p && !!p.master !== !!masterBus()) { if (p.master) addMasterBus(); else removeMasterBus(); }
   for (const [ref, d] of Object.entries(p.tracks || {})) {
     if (!d) continue;
     const t = trackOf(ref);
@@ -152,6 +159,7 @@ function restorePerf(p, at) {
     if ("qp" in d) t._queuePhrase = d.qp;
     if ("mute" in d && !!t.muted !== d.mute) clickTrackButton(t, ".sq-track__mute");
     if ("solo" in d && !!t.soloed !== d.solo) clickTrackButton(t, ".sq-track__solo");
+    if ("fx" in d && d.fx != null && trackFeedAmount(t) !== d.fx) setTrackMasterFeed(t, d.fx);
     paintTrackSlotBadge(t);
   }
   if ("scene" in p && p.scene != null && p.scene !== state.activePattern) { state.activePattern = p.scene; repaint = true; }
@@ -190,6 +198,25 @@ function deckSnapshots() {
   return out;
 }
 
+/**
+ * The master fx bus as it stands (its sound, and the lanes of the pattern it
+ * is on), or null: it is in no song, so it is recorded beside them.
+ */
+function masterSnapshot() {
+  const mb = masterBus();
+  if (!mb) return null;
+  try { return deepCopy(serializeTrackPatch(mb, { sound: true })); } catch { return null; }
+}
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Write a recorded master fx bus back: made if it is not there, left alone if it already is this. */
+function restoreMaster(patch) {
+  if (!patch) return;
+  const mb = masterBus() || addMasterBus();
+  if (!mb || sameJson(masterSnapshot(), patch)) return;
+  try { applyTrackPatch(mb, deepCopy(patch)); } catch (e) { console.warn("[seqbaby] set: the master fx bus would not load", e); }
+  mb.name = "master fx";
+}
+
 // ---- a starting point: read whole, written back ------------------------------
 
 /** The studio as it is now: what a recording starts from, and what a fork carries. */
@@ -201,7 +228,7 @@ export function captureStart() {
     const s = serializeDeckB(d.id);
     if (s) decks.push({ id: d.id, title: d.title, clips: !!d.forClips, xf: d.xf ?? null, session: s });
   }
-  return { session, decks, perf: capturePerf(), counters: captureCounters(), view: state.view };
+  return { session, decks, master: masterSnapshot(), perf: capturePerf(), counters: captureCounters(), view: state.view };
 }
 
 /**
@@ -217,6 +244,9 @@ export async function restoreStart(start, { onProgress } = {}) {
   const blob = deepCopy(start.session);
   if (start.perf?.scene != null) blob.activePattern = start.perf.scene;
   applySet(blob);
+  // the master fx bus is the desk's and outlives a song: put it as recorded
+  if (start.master) restoreMaster(start.master);
+  else removeMasterBus();
   for (const [i, d] of (start.decks || []).entries()) {
     onProgress?.(`loading deck ${i + 1} of ${start.decks.length}: ${d.title || "untitled"}`);
     try {
@@ -291,6 +321,7 @@ function beginRecording() {
   };
   recorder.base = songSnapshot(null);
   recorder.deckBase = deckSnapshots();
+  recorder.masterBase = start.master;
   recorder.lastPerf = start.perf;
   recorder.wall = performance.now();
   recorder.wall0 = recorder.wall;
@@ -459,6 +490,14 @@ function flushPatchNow(r, force = false) {
     if (dp) push("patch", { d: id, p: dp }, force);
   }
   r.deckBase = decks;
+  // The master fx bus: whole when it has just arrived, a diff after that.
+  const ms = masterSnapshot();
+  if (ms && !r.masterBase) push("patch", { m: 1, full: ms }, force);
+  else if (ms && r.masterBase) {
+    const mp = diffSession({ tracks: [r.masterBase] }, { tracks: [ms] });
+    if (mp) push("patch", { m: 1, p: mp }, force);
+  }
+  r.masterBase = ms;
 }
 
 /** After a landing or a deck arriving, the session moves by itself for a while: wait it out, then take a new base. */
@@ -471,6 +510,7 @@ function rebaseWhenSettled(r) {
     r.rebase = null;
     r.base = songSnapshot(r.base);
     r.deckBase = deckSnapshots();
+    r.masterBase = masterSnapshot();
   }, 120);
 }
 
@@ -601,6 +641,14 @@ function applyEvent([, , kind, data], time) {
       return;
     }
     case "patch": {
+      if (data.m) {
+        if (data.full) { restoreMaster(data.full); return; }
+        const cur = masterSnapshot();
+        if (!cur) return;
+        const res = applySessionPatch({ tracks: [cur] }, data.p);
+        if (res.ok) restoreMaster(res.session.tracks[0]);
+        return;
+      }
       if (data.d) {
         const cur = serializeDeckB(data.d);
         if (!cur) return;

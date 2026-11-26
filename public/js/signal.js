@@ -419,9 +419,20 @@ export function mixOutNode() {
 // same signal, and a linear pair holds its level. The desk's, like the bus:
 // never saved.
 
-/** @type {Map<any, {in: GainNode, wet: GainNode, dry: GainNode, to: AudioNode|null}>} */
+// One AudioParam moves both gains (`amt.offset`, a ConstantSource clamped to
+// 0..1 by a shaper: the wet gain is it, the dry gain one minus it), so an LFO
+// or a lane on the amount moves the pair together and can never push a gain
+// past its end. The amount is a control of its own (`.p-mfx`) on the track
+// that owns the feed: a deck's bus, or the master fx bus itself for the song.
+
+/** @type {Map<any, {in: GainNode, wet: GainNode, dry: GainNode, amt: ConstantSourceNode, nodes: AudioNode[], to: AudioNode|null}>} */
 const feeds = new Map();
 let wetSong = 1;
+
+/** The feed a track owns: its own (a deck's bus), "song" (the master fx bus), or null. */
+export function feedKeyOf(t) { return !t ? null : t._masterBus ? "song" : t._deckBus ? t : null; }
+/** Whether a track has a wet / dry into the master fx bus to turn right now. */
+export function hasMasterFeed(t) { return !!feedKeyOf(t) && !!masterBusTrack(); }
 
 /** How much of a deck (its bus track, or "song") goes through the master fx bus: 0..1. */
 export function masterFeedAmount(key) {
@@ -429,17 +440,47 @@ export function masterFeedAmount(key) {
   if (key._mfxWet == null) key._mfxWet = key === state.mix?.busA ? wetSong : 1;
   return key._mfxWet;
 }
+/** The same, asked of the track that owns the feed (null: it owns none). */
+export function trackFeedAmount(t) { const k = feedKeyOf(t); return k ? masterFeedAmount(k) : null; }
 
 /** Set it: 1 all through the master fx bus, 0 all round it. */
 export function setMasterFeed(key, amt) {
   const a = Math.max(0, Math.min(1, Number(amt) || 0));
   if (!key || key === "song") wetSong = a;
   else { key._mfxWet = a; if (key === state.mix?.busA) wetSong = a; }
+  const now = state.audioCtx?.currentTime ?? 0;
   for (const k of key === state.mix?.busA ? [key, "song"] : [key || "song"]) {
     const f = feeds.get(k);
-    const now = state.audioCtx?.currentTime ?? 0;
-    if (!f) continue;
-    try { f.wet.gain.setTargetAtTime(a, now, 0.015); f.dry.gain.setTargetAtTime(1 - a, now, 0.015); } catch {}
+    if (f) { try { f.amt.offset.cancelScheduledValues(now); f.amt.offset.setTargetAtTime(a, now, 0.015); } catch {} }
+  }
+  paintMasterFeedUI();
+}
+/** Set a feed by the track that owns it (its `.p-mfx`, a replayed set). */
+export function setTrackMasterFeed(t, amt) { const k = feedKeyOf(t); if (k) setMasterFeed(k, amt); }
+
+/** The amount's AudioParam for the track that owns a feed (an LFO's target, a lane's), or null. */
+export function masterFeedParam(t) {
+  const k = feedKeyOf(t);
+  return k ? feedFor(k)?.amt.offset ?? null : null;
+}
+/** A lane on the amount has let go: back to the knob. */
+export function releaseMasterFeed(t) {
+  const k = feedKeyOf(t), f = k && feeds.get(k);
+  if (!f) return;
+  const now = state.audioCtx?.currentTime ?? 0;
+  try { f.amt.offset.cancelScheduledValues(now); f.amt.offset.setTargetAtTime(masterFeedAmount(k), now, 0.015); } catch {}
+}
+
+/** Each feed owner's `.p-mfx`: shown while there is a master fx bus, at its amount. */
+export function paintMasterFeedUI() {
+  const on = !!masterBusTrack();
+  for (const t of state.tracks) {
+    const input = /** @type {HTMLInputElement|null} */ (t.el?.querySelector(".p-mfx"));
+    if (!input) continue;
+    const k = feedKeyOf(t);
+    const field = input.closest(".sq-field");
+    if (field) field.hidden = !(on && k);
+    if (k) { const v = String(masterFeedAmount(k)); if (input.value !== v && !input.matches(":active")) input.value = v; }
   }
 }
 
@@ -450,10 +491,20 @@ function feedFor(key) {
   if (!ctx || !to || !state.masterGain) return null;
   let f = feeds.get(key);
   if (!f) {
-    f = { in: ctx.createGain(), wet: ctx.createGain(), dry: ctx.createGain(), to: null };
-    const a = masterFeedAmount(key);
-    f.wet.gain.value = a;
-    f.dry.gain.value = 1 - a;
+    const amt = ctx.createConstantSource();
+    const clamp = ctx.createWaveShaper();
+    clamp.curve = new Float32Array([0, 0, 1]);        // below 0 is 0, above 1 is 1
+    const inv = ctx.createGain();
+    inv.gain.value = -1;
+    f = { in: ctx.createGain(), wet: ctx.createGain(), dry: ctx.createGain(), amt, nodes: [amt, clamp, inv], to: null };
+    amt.offset.value = masterFeedAmount(key);
+    f.wet.gain.value = 0;                             // + the amount
+    f.dry.gain.value = 1;                             // - the amount
+    amt.connect(clamp);
+    clamp.connect(f.wet.gain);
+    clamp.connect(inv);
+    inv.connect(f.dry.gain);
+    try { amt.start(); } catch {}
     f.in.connect(f.wet);
     f.in.connect(f.dry);
     f.dry.connect(state.masterGain);
@@ -473,7 +524,8 @@ function pruneFeeds() {
   const all = !state.tracks.some(t => t._masterBus);
   for (const [k, f] of feeds) {
     if (!all && (k === "song" || state.tracks.includes(k))) continue;
-    for (const n of [f.in, f.wet, f.dry]) { try { n.disconnect(); } catch {} }
+    try { f.amt.stop(); } catch {}
+    for (const n of [f.in, f.wet, f.dry, ...f.nodes]) { try { n.disconnect(); } catch {} }
     feeds.delete(k);
   }
 }
@@ -985,6 +1037,7 @@ export function refreshOutputSelects() {
     paintSendKnobs(t, targets.filter(b => String(b.id) !== String(t.out)));
   }
   refreshBusSourceLabels();
+  paintMasterFeedUI();
 }
 
 /**

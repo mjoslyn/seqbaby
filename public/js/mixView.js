@@ -26,7 +26,6 @@
  * open, as the clip view is; never while a control in it is held.
  */
 
-import { masterFeedAmount, setMasterFeed } from "./signal.js";
 import { toggleCue } from "./cue.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
@@ -240,13 +239,10 @@ function wireStripDrag(desk, release) {
   });
 }
 
-/** A deck's wet / dry into the master fx bus (signal.js's feed): its bus track's id, or "song". */
-function feedKnob(key, who) {
-  if (!masterBus()) return "";
-  const v = masterFeedAmount(key === "song" ? "song" : trackById(key));
-  return `<label class="sq-mix__ctl sq-mix__feed" title="${esc(`${who} into the master fx bus, wet / dry: right, all of it goes through the bus; left, it goes round it, straight to the master`)}">
-    <input type="range" min="0" max="1" step="0.01" value="${v}" data-mfx="${esc(String(key))}" aria-label="${esc(`${who} master fx wet dry`)}" />
-    <span>mst fx</span></label>`;
+/** A deck's wet / dry into the master fx bus: a proxy over the `.p-mfx` of the track that owns the feed. */
+function feedKnob(t, who) {
+  if (!t || !masterBus()) return "";
+  return proxy(t, ".p-mfx", { cls: "sq-mix__feed", label: "mst fx", title: `${who} into the master fx bus, wet / dry: right, all of it goes through the bus; left, it goes round it, straight to the master. Right-click its knob on the card below for an LFO or a lane` });
 }
 
 function strip(t, shown) {
@@ -269,7 +265,7 @@ function strip(t, shown) {
       ${proxy(t, ".p-eq-mid", { label: "mid", title: `${what}'s mids` })}
       ${proxy(t, ".p-eq-low", { label: "low", title: master ? "the whole mix's lows" : "this deck's lows: cut one deck's bass while the other's comes in" })}
       ${proxy(t, ".p-cutoff", { label: "filter", title: `a lowpass over ${master ? "everything" : "the whole deck"} (the bus's own filter)` })}
-    </div>${master ? "" : `<div class="sq-mix__tone is-feed">${feedKnob(t.id, name)}</div>`}` : `<div class="sq-mix__tone">${bus ? "" : proxy(t, ".fx-pan-pos", { label: "pan", title: "where this track sits, left to right (its pan stage)" })}</div>`;
+    </div>${master ? "" : `<div class="sq-mix__tone is-feed">${feedKnob(t, name)}</div>`}` : `<div class="sq-mix__tone">${bus ? "" : proxy(t, ".fx-pan-pos", { label: "pan", title: "where this track sits, left to right (its pan stage)" })}</div>`;
   return `<div class="${cls.join(" ")}" data-track-id="${t.id}" style="--track-hue:${hue};--track-color:${color}">
     <button type="button" class="sq-mix__name" data-act="select"${deckBus ? "" : ' draggable="true"'} title="${esc(deckBus
       ? `${name}: everything ${master ? "goes through here on the way out" : "on this deck sums here"}. Select it to open its eq, rack, mod and lanes below`
@@ -586,7 +582,7 @@ function render() {
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
   const mb = masterBus();
-  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : feedKnob("song", "the song")}${strip(mb, shown)}</div>` : ""}</div>`;
+  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : `<div class="sq-mix__strip is-feedhost" data-track-id="${mb.id}"><div class="sq-mix__tone is-feed">${feedKnob(mb, "the song")}</div></div>`}${strip(mb, shown)}</div>` : ""}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
@@ -669,7 +665,6 @@ function onInput(e) {
   const act = el.dataset.act;
   if (act === "xfade") { setXfade(Number(el.value)); return; }
   if (act === "tempo") { setMixTempo(Number(el.value)); return; }
-  if (el.dataset.mfx) { setMasterFeed(el.dataset.mfx === "song" ? "song" : trackById(el.dataset.mfx), Number(el.value)); return; }
   const sel = el.dataset.ctl;
   const t = trackById(el.closest(".sq-mix__strip")?.dataset.trackId);
   if (!sel || !t) return;

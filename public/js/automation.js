@@ -9,7 +9,7 @@ import { chanceFromUnit } from "./chanceGen.js";
 import { canModulate, eqParam, fxCopyView } from "./lfo.js";
 import { setParam } from "./params.js";
 import { fanOf } from "./paramHold.js";
-import { cutoffToHz, resonToQ, setFilter } from "./signal.js";
+import { cutoffToHz, hasMasterFeed, masterFeedParam, releaseMasterFeed, resonToQ, setFilter } from "./signal.js";
 import { eqFromUnit, eqValue } from "./soundDefaults.js";
 import { granFromUnit } from "./voices.js";
 
@@ -30,7 +30,7 @@ export function voiceAutoKeysForEngine(t) {
 export function canAutomate(t, key) {
   // A copy's lane exists only while the copy is on the track.
   if (splitFxInstanceKey(key) && !t.fxConfig?.[fxStageOfModKey(key)]) return false;
-  return canAutomateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
+  return canAutomateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on, mfx: hasMasterFeed(t) });
 }
 
 // Schedule a value change at `time`, linearly ramping to `vNext` over `stepDur`
@@ -64,6 +64,9 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     }
   };
 
+  // A deck's wet / dry into the master fx bus: the feed's own param, nothing
+  // stored (handed back like an eq band, releaseEqLane).
+  if (key === "mfx") { const p = masterFeedParam(t); if (p) ramp(p, vv, vn); return; }
   if (VOICE_AUTO_KEYS.includes(key)) {
     const param = t.voice?.getAudioParam?.(key);
     if (param && param.linearRampToValueAtTime) {
@@ -428,7 +431,7 @@ export function runAutomationForStep(t, stepIdx, time, stepDur) {
     // too, and a pad moves the real knob — it has nothing to shadow.
     (t._autoLive || (t._autoLive = {}))[key] = { from: v, to: next, t0: time, t1: time + stepDur };
     applyAutomationAtStep(t, key, v, time, next, stepDur);
-    if (eqKeyOfTarget(key)) (eqNow || (eqNow = new Set())).add(key);
+    if (eqKeyOfTarget(key) || key === "mfx") (eqNow || (eqNow = new Set())).add(key);
   }
   // An eq lane writes the biquad and nothing else, so a lane that has stopped
   // playing (switched off, removed, or not on the pattern this step is in)
@@ -439,6 +442,7 @@ export function runAutomationForStep(t, stepIdx, time, stepDur) {
 
 /** Put a band an eq lane was driving back on the panel's value. */
 function releaseEqLane(t, key) {
+  if (key === "mfx") releaseMasterFeed(t);
   const eqKey = eqKeyOfTarget(key);
   if (eqKey) { try { t.eqNode?.setBand(eqKey, eqValue(t.eq, eqKey)); } catch {} }
   if (t._autoLive) delete t._autoLive[key];

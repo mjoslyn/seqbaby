@@ -36,7 +36,7 @@ import {
 } from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility, refreshVoxLyric } from "./params.js";
-import { applyCompressorConfig, eqAnalyser, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { setTrackMasterFeed, applyCompressorConfig, eqAnalyser, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, EQ_KEYS, eqValue } from "./soundDefaults.js";
 import { mountEqDraw } from "./eqDraw.js";
 import { state, trackSlot } from "./state.js";
@@ -973,6 +973,7 @@ export function renderTrack(t) {
   if (outSel) outSel.addEventListener("change", () => setTrackOutput(t, outSel.value));
 
   node.querySelector(".p-vol").addEventListener("input", e => setParam(t, "vol", Number(e.target.value)));
+  node.querySelector(".p-mfx")?.addEventListener("input", e => setTrackMasterFeed(t, Number(e.target.value)));
   node.querySelector(".p-harm").addEventListener("input", e => setParam(t, "harm", Number(e.target.value)));
   node.querySelector(".p-timb").addEventListener("input", e => setParam(t, "timb", Number(e.target.value)));
   node.querySelector(".p-morph").addEventListener("input", e => setParam(t, "morph", Number(e.target.value)));

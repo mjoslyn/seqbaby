@@ -3370,18 +3370,37 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   being opened; a reload starts without one. Its lanes follow the pattern
   bar's scene (`onDeckA`). Adding it is a swap (an empty bus at unity is the
   same signal), taking it off goes under each rack's fade.
-- **Each deck has a wet / dry into the master fx bus** (`mst fx` on a deck
-  bus's strip; with no deck loaded, one knob for the song in the `master`
-  block). What leaves for the master goes through a FEED (`feedFor`,
-  signal.js): one node in, a wet gain into the bus and a dry gain straight
-  to the master gain, a linear pair. One feed per deck bus, keyed by the bus
-  TRACK (`_mfxWet`, so a deck that moves up a letter keeps its own), plus
-  `"song"` for the song's tracks when no deck is loaded and for the landing
-  gain; deck A's bus and the song share one amount (`wetSong`).
-  `masterFeedAmount` / `setMasterFeed` read and set it; `pruneFeeds` (from
-  `refreshAllTrackOutputs`) lets go of a gone deck's, and of all of them
-  once the bus has gone. The desk's, like the bus: not saved. A deck all
-  the way dry is not reached by the bus's fader or mute.
+- **Each deck has a wet / dry into the master fx bus**, and it is a control:
+  `.p-mfx` (`mst fx`, in the volume row) on the track that owns the feed, a
+  deck's bus or, for the song when no deck is loaded, the master fx bus
+  itself (`feedKeyOf`, signal.js). Shown only while there is a master fx bus
+  (`paintMasterFeedUI`, from `refreshOutputSelects`); the mix view's `mst
+  fx` knobs are proxies over it. What leaves for the master goes through a
+  FEED (`feedFor`): one node in, a wet gain into the bus and a dry gain
+  straight to the master gain, a linear pair moved by ONE AudioParam
+  (`amt.offset`, a ConstantSource through a 0..1 clamp: wet is it, dry one
+  minus it). One feed per deck bus, keyed by the bus TRACK (`_mfxWet`, so a
+  deck that moves up a letter keeps its own), plus `"song"` (also the
+  landing gain's); deck A's bus and the song share one amount (`wetSong`).
+  `pruneFeeds` (from `refreshAllTrackOutputs`) lets go of a gone deck's, and
+  of all of them once the bus has gone. A deck all the way dry is not
+  reached by the bus's fader or mute.
+- **It takes an LFO, a lane and a pad**: key `mfx` in both namespaces
+  (`LFO_KEYS`, `AUTOMATION_TARGETS`, `def("p-mfx", "mfx", "mfx")`), gated on
+  `hasMasterFeed(t)` through the `live.mfx` flag of `canModulateKey` /
+  `canAutomateKey`, so only a feed's owner offers it and the song builder
+  never does. `getModTarget` and the lane ramp `masterFeedParam(t)`; a lane
+  writes nothing stored, so it is handed back to the knob like an eq band
+  (`releaseEqLane` → `releaseMasterFeed`).
+- **A live set records all of it** (setRecorder.js). The bus's presence
+  (`perf.master`) and each feed's amount (`perf.tracks[ref].fx`, the bus's
+  ref is `master`) are sampled per step; the bus's sound is in the start
+  (`start.master`, `serializeTrackPatch`) and its edits are `patch` events
+  flagged `m` (whole when the bus arrives, jamSync's diff after), written
+  back with `applyTrackPatch` only when they differ from what is there
+  (`restoreMaster`). A set recorded before this has no `master` keys: its
+  start takes the bus off, and its perf leaves it alone. A deck bus's own
+  LFO and lane settings are still not in a set (its knobs are, as `ctl`).
 - A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
   jam: peers get the landed or kept session.
 - `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `masterFx`, `masterFxOff`, `play`, `scene`,

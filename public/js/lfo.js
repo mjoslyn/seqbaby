@@ -7,6 +7,7 @@ import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { eqToUnit, eqValue, splitEqKey } from "./soundDefaults.js";
 import { setParam } from "./params.js";
+import { hasMasterFeed, masterFeedParam } from "./signal.js";
 import { fanOf } from "./paramHold.js";
 import { aliasPattern, state } from "./state.js";
 import { GRAN_DEFAULTS, granFromUnit, granToUnit } from "./voices.js";
@@ -228,6 +229,7 @@ export function getModTarget(t, key) {
     const view = fxCopyView(t, key);
     return view ? getModTarget(view, baseModKey(key)) : null;
   }
+  if (key === "mfx") return masterFeedParam(t);
   if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
     return t.voice?.getAudioParam(key) ?? null;
   }
@@ -882,7 +884,7 @@ export function startSetterLfoLoopIfNeeded() {
   // A copy's target exists only while the copy is on the track.
   const inst = splitFxInstanceKey(key);
   if (inst && !t.fxConfig?.[fxStageOfModKey(key)]) return false;
-  return canModulateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
+  return canModulateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on, mfx: hasMasterFeed(t) });
 }
 export function syncLFO(t, key, { refresh = true } = {}) {
   const cfg = t.lfoConfig[key] || { enabled: false };

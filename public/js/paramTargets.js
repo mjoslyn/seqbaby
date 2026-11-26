@@ -42,6 +42,8 @@ for (const k of ["vol", "harm", "timb", "morph", "decay",
                  "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal", "noise"]) {
   def(`p-${k}`, LFO_KEYS.includes(k) ? k : null, k);
 }
+// A deck's wet / dry into the master fx bus (signal.js).
+def("p-mfx", "mfx", "mfx");
 // Track filter.
 def("p-cutoff", "cutoff", "cutoff");
 def("p-reson",  "reson",  "reson");
@@ -386,6 +388,7 @@ export const CONTROL_LABELS = {
 /** @type {Record<string, string>} */
 export const PARAM_DESCRIPTIONS = {
   vol:   "the track's output level",
+  mfx:   "how much of this goes through the master fx bus: right, all of it; left, it goes round the bus, straight to the master",
   // Fallbacks only: every engine that shows these four sliders describes them
   // itself (PLAITS_MACRO_TIPS / ENGINE_MACRO_TIPS in catalog.js, and the tips
   // written inline in updatePlaitsControlsVisibility), and those win.

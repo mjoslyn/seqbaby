@@ -858,6 +858,7 @@ export const STUDIO_BODY = String.raw`
             <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus and its filter, effects, mod matrix and automation lanes act on all of them at once"><option value="master">master</option></select>
           </div>
           <div class="sq-track__sends" hidden></div>
+          <div class="sq-field sq-track__mfx-field" hidden><label>mst fx</label><input class="p-mfx" type="range" min="0" max="1" step="0.01" value="1" title="wet / dry into the master fx bus: right, all of it goes through the bus; left, it goes round it, straight to the master" /></div>
         </div>
         <div class="sq-track__synth-row">
         <div class="sq-param-group sq-param-group--timbre">

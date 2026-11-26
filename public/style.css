@@ -4778,6 +4778,7 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 /* The master fx bus (mix.js): the desk's, shown as a strip at the mix view's
    right and as its own card under it, never in the track list. */
 #tracks > .sq-track.is-master-bus { display: none !important; }
+.sq-track__mfx-field[hidden] { display: none !important; }
 .sq-track.is-master-bus .sq-track__slot, .sq-track.is-master-bus .sq-track__remove, .sq-track.is-master-bus .sq-track__dup,
 .sq-track.is-master-bus .sq-track__engine-btn, .sq-track.is-master-bus .sq-track__out-field,
 .sq-track.is-master-bus .sq-track__sends, .sq-track.is-master-bus .sq-track__bus-in,
@@ -4789,6 +4790,7 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__master > b { font-size: 11px; letter-spacing: 0.08em; color: var(--fg-dim); }
 .sq-mix__strip.is-master { border-top-color: var(--fg); background: color-mix(in oklab, var(--fg) 6%, var(--bg)); }
 .sq-mix__tone.is-feed { min-height: 0; }
+.sq-mix__strip.is-feedhost { border: 0; background: none; padding: 0; flex: 0 0 auto; min-height: 0; }
 .sq-mix__tone.is-feed:empty { display: none; }
 .sq-mix__feed span { color: var(--fg); }
 .sq-mix__masterbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }

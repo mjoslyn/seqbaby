@@ -93,6 +93,9 @@ export const LFO_KEYS = [
   // Euclid's three counts (setter-driven; the generator reads them at step
   // time). Only on a track with live euclid running — see canModulate.
   "euclid_pulses", "euclid_steps", "euclid_rotate",
+  // A deck's wet / dry into the master fx bus (signal.js's feed): only on the
+  // track that owns one, while there is a master fx bus (canModulate).
+  "mfx",
   // The chance generator's six — the ones the machine puts under CV (chance.js).
   // Setter-driven too, and only while it is the thing making the part.
   ...CHANCE_MOD_KEYS.map(k => `chance_${k}`),
@@ -147,6 +150,7 @@ export const LFO_KEYS = [
 // Display labels for the mod picker — underscore keys show as "foo bar".
 export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
+  mfx: "master fx wet",
   ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
   ...Object.fromEntries(EQ_LFO_KEYS.map(k => [k, eqKeyLabel(k.slice(3))])),
@@ -208,7 +212,7 @@ export const lfoLabel = (k) => {
   return LFO_LABELS[k] ?? k;
 };
 export const LFO_AMP_SCALE = {
-  vol: 1, harm: 1, timb: 1, morph: 1, decay: 1,
+  vol: 1, harm: 1, timb: 1, morph: 1, decay: 1, mfx: 1,
   // cutoff and ring_freq are exponential (see cutoffToHz / applyRingMod's log
   // map): a fixed Hz swing summed onto the native AudioParam covers a
   // different fraction of the knob depending on where the base sits, so
@@ -623,6 +627,7 @@ export function fxIdLabel(id) {
 export const AUTOMATION_TARGETS = {
   // volume first
   "vol":           { label: "volume" },
+  "mfx":           { label: "master fx wet" },
   // voice / instrument params (per-engine availability via canAutomate)
   "harm":          { label: "harm" },
   "timb":          { label: "timbre" },
@@ -829,6 +834,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key === "cutoff" || key === "reson") return true;
   if (key.startsWith("eq.")) return EQ_AUTO_SET.has(key);
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
+  if (key === "mfx") return !!live.mfx;
   if (key.startsWith("euclid.")) return !!live.euclid;
   if (key.startsWith("chance.")) return !!live.chance;
   if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
@@ -864,6 +870,7 @@ export function canModulateKey(engineKey, key, live = {}) {
   // Euclid's counts — any engine, but only while the generator is the thing
   // making the rhythm. Modulating them with the pattern in charge would say
   // nothing at all.
+  if (key === "mfx") return !!live.mfx;
   if (key.startsWith("euclid_")) return !!live.euclid;
   // The chance generator's six — likewise any engine, but only while the dice
   // are the thing making the part (chance.js).
