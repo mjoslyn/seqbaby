@@ -105,13 +105,16 @@ function patternBars(id, slot) {
  * incoming decks' FIRST. Both begin at the start of the last filled pattern
  * of the deck being faded away from, and put every deck on the side faded
  * to that is not playing yet on its first filled pattern, so it comes in
- * from its top. They differ in the length: `playing` takes the playing
- * deck's last pattern's (so the fade ends as that deck's song does),
- * `queued` the first pattern's of the first deck coming in (so it ends as
- * that deck's opening pattern does).
+ * from its top. `playing` begins at the playing deck's last pattern and
+ * lasts as long as it does. `queued` lasts as long as the first pattern of
+ * the first deck coming in and ends where the playing deck's last pattern
+ * ends, so it begins that many bars back: later in the last pattern when
+ * it is shorter, in an earlier pattern of the chain when it is longer. A
+ * deck holding one pattern has no earlier pattern to begin in, so there the
+ * fade is at most the last pattern long.
  * @param {"l"|"r"} side
  * @param {"playing"|"queued"} match
- * @returns {{at: number, bars: number, ref: string}|null} null: nothing to go by
+ * @returns {{at: number, bar: number, bars: number, ref: string}|null} null: nothing to go by
  */
 function autoFade(side, match = "playing") {
   const ref = fadeDeck();
@@ -119,17 +122,28 @@ function autoFade(side, match = "playing") {
   if (!slots.length) return null;
   const last = slots[slots.length - 1];
   let bars = patternBars(ref, last);
-  let matched = false;
+  let matched = false, want = null;
   for (const id of ["a", ...deskDecks().map((d) => d.id)]) {
     if (id === ref || deckSide(id) !== side) continue;
     const first = slotsOf(id)[0];
     if (first == null) continue;
-    if (match === "queued" && !matched) { bars = patternBars(id, first); matched = true; }
+    if (match === "queued" && !matched) { want = patternBars(id, first); matched = true; }
     if (deckPlaying(id) || deckSceneOf(id) === first) continue;
     if (id === "a") requestSongScene(first, { when: "now" });
     else requestDeckScene(first, id, { when: "now" });
   }
-  return { at: last, bars, ref };
+  if (want == null) return { at: last, bar: 0, bars, ref };
+  // queued: the fade is `want` bars long and ENDS where the last pattern
+  // does, so it begins that many bars back: inside the last pattern, or,
+  // when the deck is chaining, in a pattern before it.
+  const chaining = ref === "a" ? state.patternMode === "chain" : !!deskDecks().find((d) => d.id === ref)?.chain;
+  let back = want, i = slots.length - 1;
+  for (;;) {
+    const len = patternBars(ref, slots[i]);
+    if (back <= len) return { at: slots[i], bar: len - back, bars: want, ref };
+    if (!chaining || i === 0) return { at: slots[i], bar: 0, bars: chaining ? want : len, ref };
+    back -= len; i--;
+  }
 }
 
 const isAuto = (p) => p === "auto" || p === "autoq";
@@ -139,7 +153,7 @@ function queueFade(side, now = false) {
     const to = side === "l" ? "a" : "b";
     if (now) return fadeToDeck(to, fadeBars, { now: true });
     const auto = isAuto(fadeAt.pat) ? autoFade(side, fadeAt.pat === "autoq" ? "queued" : "playing") : null;
-    if (auto) return fadeToDeck(to, auto.bars, { at: auto.at, bar: 0, ref: auto.ref });
+    if (auto) return fadeToDeck(to, auto.bars, { at: auto.at, bar: auto.bar, ref: auto.ref });
     return fadeToDeck(to, fadeBars, { at: isAuto(fadeAt.pat) ? "playing" : fadeAt.pat, bar: fadeAt.bar, ref: fadeDeck() });
   };
   if (state.playing) { pendingFade = null; run(); return; }
@@ -575,7 +589,7 @@ function xfadeParts() {
   const { pat, bar } = fadeAt;
   const bt = bar ? `bar ${bar + 1} of ` : "";
   const when = pat === "auto" ? `on deck ${RL}'s last pattern, for as long as that pattern lasts, with the decks coming in put on their first`
-    : pat === "autoq" ? `on deck ${RL}'s last pattern, for as long as the first pattern of the deck coming in lasts, with the decks coming in put on their first`
+    : pat === "autoq" ? `for as long as the first pattern of the deck coming in lasts, ending where deck ${RL}'s last pattern ends (so it can begin before that pattern), with the decks coming in put on their first`
     : pat === "bar" ? (bar ? `${bar} bar${bar === 1 ? "" : "s"} after the next bar line` : "on the next bar line")
     : pat === "playing" ? `on ${bt || "the start of "}the pattern deck ${RL} is playing, when it comes round`
     : `on ${bt || "the start of "}deck ${RL}'s pattern ${pat + 1}`;
@@ -591,7 +605,7 @@ function xfadeParts() {
     const L2 = esc(deckLabel(id)), mine = id === ref;
     return `<optgroup label="deck ${L2}">${opt(`${id}:playing`, `${L2} pat (${deckSceneOf(id) + 1})`, mine && pat === "playing")}${slotsOf(id).map((i) => opt(`${id}:${i}`, `${L2} pat ${i + 1}`, mine && pat === i)).join("")}</optgroup>`;
   }).join("");
-  const patSel = `<select data-act="fade-pat" aria-label="the pattern a fade begins in" title="the pattern a fade (either way) begins in. any: the next bar line. auto: playing and auto: queued both go out over the last pattern of the deck playing and in on the first pattern of the decks coming in; the fade is as long as the playing deck's last pattern (playing) or the incoming deck's first (queued), and the bar and length selects are not used. A deck's pat (N): the pattern that deck is playing, when it comes round; a number: that pattern of that deck (one holding one pattern is sent to it, a chain arrives by itself). Every playing deck is listed; left alone it follows the deck nearest the crossfader, deck ${esc(RL)} now">${opt("bar", "any", pat === "bar")}${opt("auto", "auto: playing", pat === "auto")}${opt("autoq", "auto: queued", pat === "autoq")}${groups}</select>`;
+  const patSel = `<select data-act="fade-pat" aria-label="the pattern a fade begins in" title="the pattern a fade (either way) begins in. any: the next bar line. auto: playing and auto: queued both go out over the last pattern of the deck playing and in on the first pattern of the decks coming in; playing: the fade is as long as the playing deck's last pattern. queued: as long as the incoming deck's first, ending where the playing deck's last pattern ends, so it can begin in an earlier pattern of a chain. The bar and length selects are not used. A deck's pat (N): the pattern that deck is playing, when it comes round; a number: that pattern of that deck (one holding one pattern is sent to it, a chain arrives by itself). Every playing deck is listed; left alone it follows the deck nearest the crossfader, deck ${esc(RL)} now">${opt("bar", "any", pat === "bar")}${opt("auto", "auto: playing", pat === "auto")}${opt("autoq", "auto: queued", pat === "autoq")}${groups}</select>`;
   const barSel = `<select data-act="fade-bar" aria-label="the bar a fade begins on" ${isAuto(pat) ? "disabled" : ""} title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === bar ? " selected" : ""}>${pat === "bar" ? "" : `${esc(RL)} `}bar ${i + 1}</option>`).join("")}</select>`;
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");
   return {
