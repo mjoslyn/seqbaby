@@ -5781,7 +5781,11 @@ mounted only while its tab is up and keeps its state in localStorage, so
 nothing is lost between. The review bar shows under either tab (its head and
 buttons only under the picker). The picker's foot (the picked genre and its
 roll, the note, `surprise me` and `build <genre>`) is pinned: the LIST
-scrolls (`.grooveBody` / `.grooveFoot`), so the buttons are never below it. `genres.js` is pure and
+scrolls (`.grooveBody` / `.grooveFoot`), so the buttons are never below it. The
+picked genre's brief and the roll's summary fold behind `show roll` / `hide
+roll` on its name line (`detail`, kept in `seqbaby.groove.v1`), beside
+`reroll`: open by default on desktop, folded on a phone, where they took a
+third of the drawer from the list. `genres.js` is pure and
 tested (`test/genres.test.js`).
 
 **The choices are rolled in code, from a seed** (`rollGenre(g, seed)`),

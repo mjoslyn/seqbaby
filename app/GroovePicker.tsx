@@ -24,7 +24,7 @@ const MAX_RECENT = 8;
 // one can be built again exactly as it was.
 type Recent = { id: string; extra: string; seed?: number };
 const newSeed = () => 1 + Math.floor(Math.random() * 0x7fffffff);
-type Saved = { query: string; family: string; picked: string; extra: string; recent: Recent[] };
+type Saved = { query: string; family: string; picked: string; extra: string; recent: Recent[]; detail: boolean };
 function readSaved(): Partial<Saved> {
   try {
     const v = JSON.parse(window.localStorage.getItem(STORE) || "{}");
@@ -60,6 +60,10 @@ export default function GroovePicker({
   // first render would differ between the server's and the browser's).
   const [seed, setSeed] = useState(1);
   const [loaded, setLoaded] = useState(false);
+  // Whether the picked genre's brief and this build's roll are spelled out
+  // under its name. They are a third of a phone's drawer, taken from the
+  // list, so there they start folded; the choice is kept either way.
+  const [detail, setDetail] = useState(true);
   // Put back what the panel held last time, once, then keep it written.
   useEffect(() => {
     const s = readSaved();
@@ -67,6 +71,7 @@ export default function GroovePicker({
     if (typeof s.family === "string" && (s.family === "" || GENRE_FAMILIES.some((f) => f.id === s.family))) setFamily(s.family);
     if (typeof s.picked === "string" && genreById(s.picked)) setPicked(s.picked);
     if (typeof s.extra === "string") setExtra(s.extra);
+    setDetail(typeof s.detail === "boolean" ? s.detail : !window.matchMedia("(max-width: 768px)").matches);
     if (Array.isArray(s.recent)) {
       setRecent(s.recent.filter((r) => r && typeof r.id === "string" && genreById(r.id)).slice(0, MAX_RECENT));
     }
@@ -74,8 +79,8 @@ export default function GroovePicker({
     setLoaded(true);
   }, []);
   useEffect(() => {
-    if (loaded) writeSaved({ query, family, picked, extra, recent });
-  }, [loaded, query, family, picked, extra, recent]);
+    if (loaded) writeSaved({ query, family, picked, extra, recent, detail });
+  }, [loaded, query, family, picked, extra, recent, detail]);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -227,18 +232,31 @@ export default function GroovePicker({
       <div className={styles.grooveFoot}>
         {genre ? (
           <div className={styles.grooveDetail}>
-            <div className={styles.grooveDetailName}>
-              {genre.name} <span className={styles.grooveMeta}>{genre.bpm[0]}-{genre.bpm[1]} bpm</span>
+            <div className={styles.grooveDetailHead}>
+              <span className={styles.grooveDetailName}>
+                {genre.name} <span className={styles.grooveMeta}>{genre.bpm[0]}-{genre.bpm[1]} bpm</span>
+              </span>
+              <button className={styles.grooveChip} onClick={() => setSeed(newSeed())} title="roll again: another tempo, key, set of parts and form">
+                reroll
+              </button>
+              <button
+                className={`${styles.grooveChip} ${detail ? styles.grooveChipOn : ""}`}
+                onClick={() => setDetail((v) => !v)}
+                aria-expanded={detail}
+                aria-controls="groove-detail"
+                title={detail ? "hide the genre's brief and this build's roll" : "show the genre's brief and what the dice chose for this build"}
+              >
+                {detail ? "hide roll" : "show roll"}
+              </button>
             </div>
-            <div className={styles.grooveBrief}>{genre.brief}</div>
-            {roll && (
-              <div className={styles.grooveRoll}>
-                <span title="what the dice chose for this build: tempo, key, the parts and the form. Each build is rolled afresh">
-                  {rollSummary(roll)}
-                </span>
-                <button className={styles.grooveChip} onClick={() => setSeed(newSeed())} title="roll again: another tempo, key, set of parts and form">
-                  reroll
-                </button>
+            {detail && (
+              <div id="groove-detail" className={styles.grooveDetailBody}>
+                <div className={styles.grooveBrief}>{genre.brief}</div>
+                {roll && (
+                  <div className={styles.grooveRoll} title="what the dice chose for this build: tempo, key, the parts and the form. Each build is rolled afresh">
+                    {rollSummary(roll)}
+                  </div>
+                )}
               </div>
             )}
           </div>

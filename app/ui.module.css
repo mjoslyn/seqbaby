@@ -718,7 +718,10 @@ a.bylineLike { text-decoration: none; }
 .grooveBody { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .grooveBody > * { flex-shrink: 0; }
 .grooveFoot { flex: none; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 8px; }
-.grooveFoot .grooveDetail { max-height: 24vh; overflow-y: auto; overscroll-behavior: contain; }
+.grooveFoot .grooveDetailBody { max-height: 24vh; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 4px; }
+.grooveDetailHead { display: flex; align-items: center; gap: 6px; }
+.grooveDetailHead .grooveDetailName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grooveDetailHead .grooveChip { flex: none; }
 .grooveActions { display: flex; gap: 6px; }
 .grooveActions > * { flex: 1; }
 .grooveActions > :last-child { flex: 2; }
