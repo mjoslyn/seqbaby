@@ -5013,16 +5013,17 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__fade select { font-size: 10px; padding: 2px; }
 
 /* the picker: a song for deck B */
-.sq-mix__picker { width: min(620px, 94vw); }
+.sq-mix__picker { width: min(700px, 94vw); }
 .sq-mix__list { display: grid; gap: 3px; max-height: 44vh; overflow-y: auto; overflow-x: hidden; margin: 8px 0; }
 /* a row: the title, its tempo, its tags, then whose it is */
-.sq-mix__pick { display: grid; grid-template-columns: minmax(0, 1fr) 54px 170px 92px; align-items: baseline; gap: 10px; min-width: 0; text-align: left; padding: 7px 9px; font-size: 12px; }
+.sq-mix__pick { display: grid; grid-template-columns: minmax(0, 1fr) 54px 78px 150px 92px; align-items: baseline; gap: 10px; min-width: 0; text-align: left; padding: 7px 9px; font-size: 12px; }
 .sq-mix__pick b { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sq-mix__pick span { color: var(--fg-dim); font-size: 10px; white-space: nowrap; }
 .sq-mix__pick-bpm { text-align: right; color: var(--fg) !important; font-variant-numeric: tabular-nums; }
 .sq-mix__pick-tags { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
 .sq-mix__pick-note { text-align: right; overflow: hidden; text-overflow: ellipsis; }
-.sq-mix__picker.sq-modal { max-width: min(640px, 94vw); }
+.sq-mix__pick-key { color: var(--accent) !important; overflow: hidden; text-overflow: ellipsis; }
+.sq-mix__picker.sq-modal { max-width: min(720px, 94vw); }
 .sq-mix__pick-tags i { font-style: normal; padding: 0 5px; border: 1px dashed var(--border); border-radius: 8px; color: var(--accent-2); }
 
 /* ---- THE VIEWS: groove / clips / arrange / piano (views.js) -------------

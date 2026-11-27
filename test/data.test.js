@@ -109,6 +109,21 @@ test("saving appends a version off its parent, so loading an old one and saving 
   assert.equal((await songs.deleteVersion(env, alice, v2.versionId)).ok, true);
 });
 
+test("a song's key is a column, written with it and gone when the scale is off", async () => {
+  const { env, alice } = await world();
+  const { scaleLabel } = await import("../public/js/mixPlan.js");
+  for (const sc of [{ active: true, root: 6, mode: "minor" }, { active: true, root: -1, mode: "dorian" }, { active: false, root: 3, mode: "major" }, null]) {
+    assert.equal(songs.songKey({ scale: sc }) ?? "", scaleLabel(sc), "the two spellings agree");
+  }
+  const data = { ...session(1), scale: { active: true, root: 6, mode: "minor" } };
+  const saved = await songs.saveSong(env, alice, { title: "keyed", data });
+  let mine = (await songs.listSongs(env, alice)).songs.find((x) => x.id === saved.id);
+  assert.equal(mine.key, "F# minor");
+  await songs.saveSong(env, alice, { id: saved.id, data: { ...data, scale: { active: false, root: 6, mode: "minor" } } });
+  mine = (await songs.listSongs(env, alice)).songs.find((x) => x.id === saved.id);
+  assert.equal(mine.key, null);
+});
+
 test("the lists' columns are written with the song", async () => {
   const { env, alice } = await world();
   const saved = await songs.saveSong(env, alice, { title: "cols", data: session(7) });

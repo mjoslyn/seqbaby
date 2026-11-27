@@ -18,6 +18,8 @@ export type ExploreSong = FeedSong & {
   instruments: string[];
   /** What its owner tagged it: a genre, or anything (lib/songTags.js). */
   tags?: string[];
+  /** Its key ("F# minor"), when its scale is on (the `song_key` column). */
+  key?: string | null;
 };
 
 /** How many of the newest published songs the explorer holds. Enough to be
@@ -34,7 +36,7 @@ export async function loadExplore(): Promise<ExploreCatalog> {
     const db = (await cfEnv()).DB;
     const rows: Row[] = await all(
       db,
-      `select s.id, s.title, s.share_slug, s.updated_at, s.owner_id, s.bpm, s.preview, s.engines, s.tags,
+      `select s.id, s.title, s.share_slug, s.updated_at, s.owner_id, s.bpm, s.preview, s.engines, s.tags, s.song_key,
               (select count(*) from song_likes l where l.song_id = s.id) as likes
          from songs s where s.is_public = 1 and s.share_slug is not null
         order by s.updated_at desc limit ?1`,
@@ -56,6 +58,7 @@ export async function loadExplore(): Promise<ExploreCatalog> {
       preview: json(r.preview),
       instruments: instrumentsOf(json(r.engines, [])),
       tags: normalizeTags(json(r.tags, [])),
+      key: typeof r.song_key === "string" && r.song_key ? r.song_key : null,
     }));
     return { songs, hasInstruments: true, now };
   } catch {

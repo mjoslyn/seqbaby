@@ -968,7 +968,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
   let remote = mixSource()?.list ? "loading" : "none";
   let remoteError = "";
   const local = loadSetsMap();
-  for (const name of Object.keys(local)) entries.push({ kind: "local", id: name, title: name, note: "this browser", bpm: Number(local[name]?.bpm) || null, tags: [] });
+  for (const name of Object.keys(local)) entries.push({ kind: "local", id: name, title: name, note: "this browser", bpm: Number(local[name]?.bpm) || null, key: scaleLabel(local[name]?.scale), tags: [] });
   const draw = () => {
     const q = input.value.trim().toLowerCase();
     const link = readLink(input.value);
@@ -976,12 +976,13 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
       list.innerHTML = `<button type="button" class="sq-mix__pick" data-link="1"><b>${link.slug ? "the shared song" : "the song"} this link names</b><span>press enter to load it</span></button>`;
       return;
     }
-    // a search reads the title, who made it, its tags and its tempo ("148")
-    const hay = (x) => `${x.title} ${x.note} ${(x.tags || []).join(" ")} ${x.bpm ? `${Math.round(x.bpm)} bpm` : ""}`.toLowerCase();
+    // a search reads the title, who made it, its tags, its tempo ("148") and its key
+    const hay = (x) => `${x.title} ${x.note} ${(x.tags || []).join(" ")} ${x.bpm ? `${Math.round(x.bpm)} bpm` : ""} ${x.key || ""}`.toLowerCase();
     const hits = entries.filter((x) => !q || hay(x).includes(q));
     const rows = hits.map((x) => `<button type="button" class="sq-mix__pick" data-i="${entries.indexOf(x)}">
         <b>${esc(x.title)}</b>
         <span class="sq-mix__pick-bpm">${x.bpm ? `${Math.round(x.bpm)} bpm` : ""}</span>
+        <span class="sq-mix__pick-key"${x.key ? ` title="the song's key: ${esc(x.key)}"` : ""}>${esc(x.key || "")}</span>
         <span class="sq-mix__pick-tags">${(x.tags || []).slice(0, 3).map((g) => `<i>${esc(g)}</i>`).join("")}</span>
         <span class="sq-mix__pick-note">${esc(x.note)}</span>
       </button>`).join("");
@@ -1001,7 +1002,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
     // a list that never answers is a failure too, not a spinner for ever
     const slow = new Promise((_, no) => setTimeout(() => no(new Error("the song list is taking too long")), 20000));
     Promise.race([src.list(), slow]).then((songs) => {
-      const got = (songs || []).map((s) => ({ kind: "account", id: String(s.id), title: s.title || "untitled", note: s.note || "your songs", bpm: Number(s.bpm) || null, tags: Array.isArray(s.tags) ? s.tags : [] }));
+      const got = (songs || []).map((s) => ({ kind: "account", id: String(s.id), title: s.title || "untitled", note: s.note || "your songs", bpm: Number(s.bpm) || null, key: typeof s.key === "string" ? s.key : "", tags: Array.isArray(s.tags) ? s.tags : [] }));
       entries = [...got, ...locals];
       remote = "ready";
     }).catch((err) => {

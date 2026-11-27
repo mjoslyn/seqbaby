@@ -108,7 +108,8 @@ env / fx / eq / comp / mod / automation per track.
 ├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares;
 │                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets;
 │                              0004_compose_critic.sql: the critic's columns on compose_turns;
-│                              0005_song_tags.sql: songs.tags)
+│                              0005_song_tags.sql: songs.tags;
+│                              0006_song_key.sql: songs.song_key)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -3348,9 +3349,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   the explorer's cached feed, never `data`; `loadSong` reads any public
   song). The picker says `looking for songs…` while it waits, shows why and
   offers `try again` when the list fails or takes over 20s, shows each
-  song's tempo and tags (the `bpm` and `tags` columns: `listSongs` now
-  carries `bpm`, `listPublicSongs` `tags`) and searches titles, who made
-  them, tags and tempo; the picker also lists this browser's saved sessions, and
+  song's tempo, key and tags (the `bpm`, `song_key` and `tags` columns:
+  `listSongs` and `listPublicSongs` carry all three; the key is `songKey`,
+  lib/data/songs.js, written by `songColumns` only while the scale is on, so
+  a song with no scale shows none, and a song not saved since the column
+  was added shows none until it is; a local session's is read off its
+  `scale`) and searches titles, who made them, tags, tempo and key; the picker also lists this browser's saved sessions, and
   takes a file or a pasted `?s=` / `?open=` link. On `seqbaby:mixlanded` the
   shell moves the open-song slot: onto the landed song when it is the
   account's own (a save is its next version), else to nothing (a save asks
