@@ -13,6 +13,7 @@
 // cursor on past what was written. Vim mode's insert (vim.js) is how it is
 // reached from the keyboard, and vim.js drives its cursor.
 
+import { samplePitchMode } from "./buffers.js";
 import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
@@ -117,7 +118,7 @@ export function hitOptsFor(t) {
     startOffset: sd.start ?? 0, endOffset: sd.end ?? 1,
     fadeIn: sd.fadeIn ?? 0, fadeOut: sd.fadeOut ?? 0, loopMode: sd.loopMode ?? "off", playMode: sd.play,
     pitchBase: t.isDrumKit ? 36 : 60, isDrumKit: t.isDrumKit,
-    sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false,
+    sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false, pitchShift: samplePitchMode(t) === "shift",
   };
 }
 

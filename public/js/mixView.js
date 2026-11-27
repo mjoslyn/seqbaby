@@ -174,13 +174,16 @@ const isOpen = () => state.view === "mix" && !!root;
 
 // The two sheets over the desk: the selected track's card (`inst`, from the
 // bottom, where the split's lower pane was) and the master fx bus's strip
-// (`master`, at the right). Each is toggled from the mix bar and remembered
+// (`master`, from the bottom too, in the same place: one at a time). Each is toggled from the mix bar and remembered
 // per browser; the desk under them has the whole view.
 const SHEETS_KEY = "seqbaby.mixSheets.v1";
 const sheets = { inst: false, master: true };
 try { Object.assign(sheets, JSON.parse(localStorage.getItem(SHEETS_KEY) || "{}") || {}); } catch {}
+if (sheets.inst && sheets.master) sheets.inst = false;
 function setSheet(k, on) {
   sheets[k] = !!on;
+  // both come up from the bottom at full width, so one at a time
+  if (on) sheets[k === "inst" ? "master" : "inst"] = false;
   try { localStorage.setItem(SHEETS_KEY, JSON.stringify({ inst: !!sheets.inst, master: !!sheets.master })); } catch {}
   root?.classList.toggle("has-inst", !!sheets.inst);
   scheduleMixPaint();
@@ -685,6 +688,7 @@ function seatMaster(on) {
   const mb = masterBus();
   for (const o of state.tracks) if (o.el?.parentElement === slot && (o !== mb || !on)) restoreTrackCard(o);
   masterSheet.hidden = !(on && mb?.el);
+  root?.classList.toggle("has-mfx", !masterSheet.hidden);
   if (on && mb?.el && mb.el.parentElement !== slot) slot.appendChild(mb.el);
 }
 

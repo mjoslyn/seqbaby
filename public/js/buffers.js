@@ -71,16 +71,89 @@ export function startSampleSource(ctx, buffer, rate, time, duration, opts) {
     // opts.playMode says otherwise when the track's switch has been set:
     // "trigger" plays the whole region whatever the note's length, "gate"
     // stops with the note, a drum kit included.
-    const mode = opts?.playMode;
-    if (mode === "trigger") stopTime = time + wallTime;
-    else if (mode === "gate") stopTime = time + Math.min(wallTime, Math.max(0.02, duration));
-    else {
-      const gate = opts?.isDrumKit ? duration + 0.5 : duration;
-      stopTime = time + Math.min(wallTime, Math.max(0.1, gate));
-    }
+    stopTime = oneShotStop(time, wallTime, duration, opts);
     src.start(time, startSec, playLenSource);
   }
   return { src, stopTime };
+}
+
+/** When a one-shot stops: the track's trigger / gate switch, or the old rule. */
+export function oneShotStop(time, wallTime, duration, opts) {
+  const mode = opts?.playMode;
+  if (mode === "trigger") return time + wallTime;
+  if (mode === "gate") return time + Math.min(wallTime, Math.max(0.02, duration));
+  const gate = opts?.isDrumKit ? duration + 0.5 : duration;
+  return time + Math.min(wallTime, Math.max(0.1, gate));
+}
+
+/** A sampler track's pitch select: "lock" (notes are ignored), "speed" (a
+ *  note resamples it, so higher is shorter) or "shift" (a note changes the
+ *  pitch and the length stays). `pitchLock` is the old checkbox and still the
+ *  lock; "shift" rides in `sampleDefaults.pitch`. */
+export function samplePitchMode(t) {
+  if (t?.pitchLock !== false) return "lock";
+  return t?.sampleDefaults?.pitch === "shift" ? "shift" : "speed";
+}
+
+// ---- pitch without speed -------------------------------------------------------------
+//
+// A note that transposes a sample by resampling also changes its length. The
+// "shift" mode keeps the length: the sample is read as overlapping grains
+// (SHIFT_GRAIN long, one every SHIFT_HOP, Hann windows that sum to one), each
+// grain resampled by the pitch ratio while the place the grains are read FROM
+// moves at the sample's own speed. Plain overlap-add puts each grain down
+// wherever the clock says, out of phase with the one before it, which on a
+// held tone is a flutter at the hop rate; so each grain's start is searched a
+// few milliseconds either side for the place whose waveform best matches where
+// the last grain has got to (WSOLA). Pure arithmetic over the sample data, so
+// the tests run it.
+export const SHIFT_GRAIN = 0.07;
+export const SHIFT_HOP = 0.035;
+const SHIFT_SEARCH = 0.012;
+
+/**
+ * @param {Float32Array} data  one channel of the sample
+ * @param {{startSec:number, endSec:number, fit:number, ratio:number, loop?:boolean}} o
+ *   fit: source seconds per second (the sample's own speed); ratio: the pitch
+ * @returns {{next: () => ({t:number, pos:number, first:boolean} | null)}}
+ *   t: seconds after the hit; pos: where in the sample the grain starts
+ */
+export function makeShiftPlanner(data, sr, o) {
+  const { startSec, endSec, fit, ratio } = o;
+  const span = Math.max(0.001, endSec - startSec);
+  const rho = fit * ratio;                         // source seconds a grain eats per second
+  const step = Math.max(1, Math.floor(sr / 11025)); // compare at about 11k
+  const cmp = Math.min(0.03, (SHIFT_GRAIN - SHIFT_HOP) * rho);
+  const cmpN = Math.max(8, Math.floor((cmp * sr) / step));
+  let k = 0, prev = startSec;
+  return {
+    next() {
+      const t = k * SHIFT_HOP;
+      let target = startSec + fit * t;
+      if (target >= endSec) {
+        if (!o.loop) return null;
+        target = startSec + ((target - startSec) % span);
+      }
+      let pos = target;
+      if (k > 0) {
+        const nat = Math.floor((prev + SHIFT_HOP * rho) * sr);   // where the last grain is now
+        const lo = Math.max(Math.floor(startSec * sr), Math.floor((target - SHIFT_SEARCH) * sr));
+        const hi = Math.min(Math.floor(endSec * sr) - cmpN * step - 1, Math.floor((target + SHIFT_SEARCH) * sr));
+        if (nat >= 0 && nat + cmpN * step < data.length && hi > lo) {
+          let best = -Infinity, at = Math.floor(target * sr);
+          for (let c = lo; c <= hi; c += step) {
+            let dot = 0, en = 1e-9;
+            for (let i = 0, a = nat, b = c; i < cmpN; i++, a += step, b += step) { dot += data[a] * data[b]; en += data[b] * data[b]; }
+            const score = dot / Math.sqrt(en);
+            if (score > best) { best = score; at = c; }
+          }
+          pos = at / sr;
+        }
+      }
+      prev = pos;
+      return { t, pos, first: k++ === 0 };
+    },
+  };
 }
 
 // Shared envelope for sample-based voices: honors opts.fadeIn/fadeOut (seconds)

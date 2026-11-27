@@ -1,6 +1,7 @@
 import { FX_STAGE_LEVEL_KEY } from "./constants.js";
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_KIT_LABELS, bundledSampleUrl, engineByKey } from "./catalog.js";
-import { loadBuffer, samplePlayMode } from "./buffers.js";
+import { openSampleFinder } from "./main.js";
+import { loadBuffer, samplePitchMode, samplePlayMode } from "./buffers.js";
 import { isPhoneLayout, setStatus } from "./dom.js";
 import { renderEuclidPanel } from "./euclid.js";
 import { renderChancePanel } from "./chance.js";
@@ -422,6 +423,16 @@ export function openGranularWavModal(t) {
     fileSel.value = t.granularSample?.id ?? "";
   };
   rebuildFileOptions();
+  // the search beside it: a sample found there is a new sample, so the
+  // region and the slices start over, as with the select
+  modal.querySelector(".sq-samp__find").addEventListener("click", async () => {
+    if (!(await openSampleFinder(t)) || !t._sampleModal) return;
+    t.slices = [];
+    sd.start = 0; sd.end = 1;
+    rebuildFileOptions();
+    renderPads();
+    draw();
+  });
   fileSel.addEventListener("change", async () => {
     const id = fileSel.value;
     if (!id) return;
@@ -735,7 +746,7 @@ export function openSampleEditorModal(t) {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="sq-samp__head">
-      <span class="sq-samp__title">sample · <select class="sq-samp__file" title="switch this track's sample"></select></span>
+      <span class="sq-samp__title">sample · <select class="sq-samp__file" title="switch this track's sample"></select><button type="button" class="sq-samp__find sq-btn--ghost" title="search for a sample: the bundled ones and freesound.org" aria-label="search for a sample"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button></span>
       <span class="sq-samp__info"></span>
     </div>
     <canvas class="sq-samp__canvas" width="640" height="150"></canvas>
@@ -746,7 +757,9 @@ export function openSampleEditorModal(t) {
       <label>fit <select class="sq-samp__fit">
         <option value="native">native</option><option value="2xbpm">2× bpm</option><option value="1xbpm">1× bpm</option><option value="1/2bpm">1/2 bpm</option><option value="1/4bpm">1/4 bpm</option>
       </select></label>
-      <label class="sq-samp__pl"><input type="checkbox" class="sq-samp__pitchlock" /> pitch lock</label>
+      <label title="what a step's note does to the sample. pitch lock: nothing, it plays at its own pitch and speed (a bpm-fitted loop stays on the grid). speed: the note resamples it, so higher is faster and shorter, like a tape. shift: the note changes the pitch and the sample keeps its length">pitch <select class="sq-samp__pitchlock">
+        <option value="lock">pitch lock</option><option value="speed">follow notes: speed</option><option value="shift">follow notes: keep length</option>
+      </select></label>
       <label>loop <select class="sq-samp__loop">
         <option value="off">off</option><option value="loop">loop</option><option value="pingpong">ping-pong</option>
       </select></label>
@@ -805,6 +818,16 @@ export function openSampleEditorModal(t) {
     fileSel.value = t.sampleSource?.kind === "bundled" ? (t.sampleSource.id ?? "") : "";
   };
   rebuildFileOptions();
+  // the search beside it: a sample found there is a new sample, so the
+  // region and the slices start over, as with the select
+  modal.querySelector(".sq-samp__find").addEventListener("click", async () => {
+    if (!(await openSampleFinder(t)) || !t._sampleModal) return;
+    t.slices = [];
+    sd.start = 0; sd.end = 1;
+    rebuildFileOptions();
+    renderPads();
+    draw();
+  });
   fileSel.addEventListener("change", async () => {
     const id = fileSel.value;
     if (!id) return;
@@ -847,7 +870,7 @@ export function openSampleEditorModal(t) {
   const pads = modal.querySelector(".sq-slice__pads");
   fitSel.value = t.sampleSpeedMode || "native";
   loopSel.value = sd.loopMode || "off";
-  plCb.checked = t.pitchLock !== false;
+  plCb.value = samplePitchMode(t);
   fiI.value = String(sd.fadeIn ?? 0); foI.value = String(sd.fadeOut ?? 0);
   onCb.checked = !!t.sliceOn;
   baseIn.value = String(t.sliceBase ?? 60);
@@ -950,7 +973,10 @@ export function openSampleEditorModal(t) {
 
   snapSel.addEventListener("change", draw);
   fitSel.addEventListener("change", () => { t.sampleSpeedMode = fitSel.value || "native"; applySampleSpeed(t); });
-  plCb.addEventListener("change", () => { t.pitchLock = plCb.checked; });
+  plCb.addEventListener("change", () => {
+    t.pitchLock = plCb.value === "lock";
+    if (plCb.value === "shift") sd.pitch = "shift"; else delete sd.pitch;
+  });
   loopSel.addEventListener("change", () => { sd.loopMode = loopSel.value; });
   // trigger / gate: unset is what the track always did (a drum kit rings on,
   // anything else stops with its note), shown as the nearer of the two.
@@ -990,7 +1016,7 @@ export function openSampleEditorModal(t) {
     try {
       t.voice.hit(t.isDrumKit ? 36 : 60, state.audioCtx.currentTime + 0.02, t.voice.buffer.duration, 0.85, {
         startOffset: sd.start, endOffset: sd.end, fadeIn: sd.fadeIn, fadeOut: sd.fadeOut, loopMode: sd.loopMode,
-        pitchBase: t.isDrumKit ? 36 : 60, isDrumKit: t.isDrumKit, sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false,
+        pitchBase: t.isDrumKit ? 36 : 60, isDrumKit: t.isDrumKit, sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false, pitchShift: samplePitchMode(t) === "shift",
       });
     } catch (e) { console.warn(e); }
     t.sliceOn = wasSlice;

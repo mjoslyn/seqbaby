@@ -537,6 +537,13 @@ export function setTrack(song, index, opts = {}) {
   if (opts.density != null) t.density = num(opts.density, "density", 0, 1);
   if (opts.drumKit != null) t.isDrumKit = !!opts.drumKit;
   if (opts.pitchLock != null) t.pitchLock = !!opts.pitchLock;
+  if (opts.samplePitch != null) {
+    if (t.engineKey !== "sampler") fail(`\`samplePitch\` only applies to a sampler track (this one is ${t.engineKey})`);
+    if (!["lock", "speed", "shift"].includes(opts.samplePitch)) fail('`samplePitch` is "lock" (notes are ignored), "speed" (a note resamples the sample, higher is shorter) or "shift" (a note changes the pitch, the length stays)');
+    t.pitchLock = opts.samplePitch === "lock";
+    t.sampleDefaults = { ...(t.sampleDefaults || {}) };
+    if (opts.samplePitch === "shift") t.sampleDefaults.pitch = "shift"; else delete t.sampleDefaults.pitch;
+  }
   if (opts.samplePlay != null) {
     if (t.engineKey !== "sampler") fail(`\`samplePlay\` only applies to a sampler track (this one is ${t.engineKey})`);
     if (opts.samplePlay !== "trigger" && opts.samplePlay !== "gate") fail('`samplePlay` is "trigger" (a note plays the whole sample) or "gate" (it stops when the step ends)');

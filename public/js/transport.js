@@ -1,3 +1,4 @@
+import { samplePitchMode } from "./buffers.js";
 import { cuePlays, wireOutput } from "./cue.js";
 import { restoreLaneBases, runAutomationForStep } from "./automation.js";
 import { fireMetronome, paintBeatIndicator, repeatReadout } from "./beat.js";
@@ -721,6 +722,7 @@ export async function startPlayback(opts = {}) {
                 // user plays the whole buffer or a quarter of it).
                 sampleSpeedMode: t.sampleSpeedMode,
                 pitchLocked: t.pitchLock !== false,
+                pitchShift: samplePitchMode(t) === "shift",
               };
           const ratchet = Math.max(1, Math.min(8, Math.round(gate.ratchet ?? t.ratchets?.[idx] ?? 1)));
           // A strum spreads the stack in time, each note starting later and

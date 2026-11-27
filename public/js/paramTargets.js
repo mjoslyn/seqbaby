@@ -534,7 +534,7 @@ export const PARAM_DESCRIPTIONS = {
   // Sample editor.
   "sq-samp__snap":      "quantises the region handles to a musical division as you drag them",
   "sq-samp__fit":       "stretches the sample to fit a number of bars at the current tempo",
-  "sq-samp__pitchlock": "keeps a bpm-fitted sample at its natural pitch",
+  "sq-samp__pitchlock": "what a note does to the sample: nothing (pitch lock), resample it (speed) or change its pitch and keep its length (shift)",
   "sq-samp__loop":      "what a step does when it reaches the end of the region",
   "sq-samp__fadein":    "fade at the start of every hit, in seconds",
   "sq-samp__fadeout":   "fade at the end of every hit, in seconds",

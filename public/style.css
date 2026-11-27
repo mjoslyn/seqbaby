@@ -4824,8 +4824,12 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__foot button { padding: 4px 12px; font-size: 12px; }
 .sq-mix__sheet-x { position: sticky; top: 0; float: right; z-index: 2; padding: 2px 9px; font-size: 14px; line-height: 1.2; }
 /* the master fx bus's sheet: the bus's own track card, moved in (mixView.js seatMaster) */
-.sq-mix__master { position: absolute; right: 16px; top: 52px; bottom: 60px; width: min(640px, 55%); z-index: 45; display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 12px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: -8px 10px 24px rgba(0, 0, 0, 0.45); }
+.sq-mix__master { position: absolute; left: 0; right: 0; top: calc(var(--split-top, 58%) + 14px); bottom: 48px; z-index: 40; display: flex; flex-direction: column; gap: 8px;
+  padding: 0 16px 12px; overflow: auto; background: var(--bg); }
+/* full width from the bottom, as the instrument sheet is, under the same handle */
+.sq-mix.is-overlay.has-mfx > .sq-split__handle { display: block; position: absolute; left: 0; right: 0; top: var(--split-top, 58%); height: 14px; margin: 0;
+  z-index: 41; background: var(--bg); border-top: 1px solid var(--border); border-radius: 10px 10px 0 0; box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.45); }
+.sq-mix.is-overlay.has-mfx > .sq-split__handle::before { display: none; }
 .sq-mix__master[hidden] { display: none !important; }
 .sq-mix__master-head { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--fg-dim); }
 .sq-mix__master-head > b { font-size: 12px; letter-spacing: 0.08em; color: var(--fg); }
@@ -5519,3 +5523,8 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
 .sq-perf__menu-modal .sq-mute-scenes button { min-height: 44px; flex: 1 1 0; }
 /* the mix view has no `+ add fx bus` under it: its footer's `master fx` is the bus there */
 body.view-mix #add-bus { display: none; }
+/* the sample editor's search button, and its finder */
+.sq-samp__find { padding: 2px 6px; margin-left: 4px; vertical-align: middle; line-height: 1; }
+.sq-samp__find svg { display: block; }
+.sq-sampler__finder-own { display: grid; gap: 4px; max-height: 34vh; overflow: auto; }
+.sq-sampler__finder .sq-sampler__find-list { max-height: 34vh; overflow: auto; }

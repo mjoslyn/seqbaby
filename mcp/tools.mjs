@@ -260,9 +260,9 @@ export const TOOLS = [
   },
   {
     name: "set_track", title: "Set track",
-    description: "Track settings: name, length (resizes every pattern; with `pattern`, only that one, since patterns have lengths of their own), mute, solo, glide (0..0.5 s), speed (tempo multiple: 0.5 half time, 2 double), density, drumKit, out (\"master\" or the index of an fx bus track), samplePlay (a sampler: \"trigger\" plays the whole sample whatever the step's length, \"gate\" stops it when the step ends; left alone a drum kit rings on and anything else stops with its note).",
+    description: "Track settings: name, length (resizes every pattern; with `pattern`, only that one, since patterns have lengths of their own), mute, solo, glide (0..0.5 s), speed (tempo multiple: 0.5 half time, 2 double), density, drumKit, out (\"master\" or the index of an fx bus track), samplePlay (a sampler: \"trigger\" plays the whole sample whatever the step's length, \"gate\" stops it when the step ends; left alone a drum kit rings on and anything else stops with its note), samplePitch (a sampler: \"lock\" ignores the step's note, \"speed\" resamples the sample so higher is shorter, \"shift\" changes the pitch and keeps the length: use it to play a melody on a sound without its length changing).",
     inputSchema: { track: trackArg, name: z.string().optional(), length: z.number().int().optional(), pattern: z.number().int().min(0).max(31).optional().describe("with length: resize only this pattern (0..31)"), mute: z.boolean().optional(), solo: z.boolean().optional(),
-      glide: z.number().optional(), speed: z.number().optional(), density: z.number().optional(), drumKit: z.boolean().optional(), samplePlay: z.enum(["trigger", "gate"]).optional(),
+      glide: z.number().optional(), speed: z.number().optional(), density: z.number().optional(), drumKit: z.boolean().optional(), samplePlay: z.enum(["trigger", "gate"]).optional(), samplePitch: z.enum(["lock", "speed", "shift"]).optional(),
       out: z.union([z.literal("master"), z.number().int()]).optional() },
     handler: (ctx, { track, ...opts }) => sb.setTrack(ctx.song, track, opts),
   },

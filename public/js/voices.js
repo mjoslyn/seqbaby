@@ -1,4 +1,4 @@
-import { applySampleFadeEnvelope, loadBuffer, startSampleSource } from "./buffers.js";
+import { applySampleFadeEnvelope, loadBuffer, makeShiftPlanner, oneShotStop, SHIFT_GRAIN, SHIFT_HOP, startSampleSource } from "./buffers.js";
 import { bundledSampleUrl, engineByKey, instrumentNoteUrl, instrumentOf } from "./catalog.js";
 // The Plaits WASM port is an ambient global (public/woscillators.js, loaded
 // before the engine). Read here rather than in constants.js so that module
@@ -1559,6 +1559,10 @@ export class DrumSynthVoice {
 
 // Build a ping-pong buffer from a sub-region of an input buffer: [forward | reversed].
 // Caches per (buffer, startFrac, endFrac) so step-loop playback doesn't rebuild it each hit.
+// The grain windows of the sampler's pitch shift (two Hann halves that sum to
+// one at the hop; the first grain starts full, so a hit keeps its attack).
+const SHIFT_HANN = Float32Array.from({ length: 65 }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / 64));
+const SHIFT_HEAD = SHIFT_HANN.map((v, i) => (i <= 32 ? 1 : v));
 // The one unified sampler voice. Source is either a user upload
 // (track.uploadBuffer, base64-persisted) or a bundled sample (loaded by id from
 // track.sampleSource). Replaces the old SampleVoice / UploadVoice / ElevenVoice.
@@ -1630,6 +1634,7 @@ export class SamplerVoice {
       src.onended = () => this.active.delete(src);
       return;
     }
+    if (this._hitShifted(midiNote, time, duration, velocity, opts)) return;
     const rate = sampleHitRate(this.baseRate, midiNote, opts);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
@@ -1639,6 +1644,67 @@ export class SamplerVoice {
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
+  }
+  // The pitch select's "shift": the note changes the pitch and the sample
+  // keeps its length (buffers.js makeShiftPlanner). Grains are built a quarter
+  // second ahead off a timer the hit owns, as the granular voice builds its
+  // own, so a long loop is not hundreds of nodes made inside the transport's
+  // callback. Returns the hit's record, or null when this hit is not shifted
+  // (another mode, or a note at the sample's own pitch).
+  _hitShifted(midiNote, time, duration, velocity, opts) {
+    if (!opts?.pitchShift) return null;
+    const pitchBase = Number.isFinite(opts.pitchBase) ? opts.pitchBase : 60;
+    const ratio = Math.pow(2, (midiNote - pitchBase) / 12);
+    if (Math.abs(ratio - 1) < 1e-4) return null;
+    const buf = this.buffer, ctx = this.ctx;
+    const fit = sampleHitRate(this.baseRate, midiNote, { ...opts, pitchLocked: true });
+    const startSec = Math.max(0, Math.min(1, opts.startOffset ?? 0)) * buf.duration;
+    const endSec = Math.max(startSec + 0.001, Math.min(1, opts.endOffset ?? 1) * buf.duration);
+    const loop = (opts.loopMode || "off") !== "off";
+    const wall = (endSec - startSec) / Math.max(0.01, fit);
+    const stopTime = loop ? time + Math.max(0.1, duration) : oneShotStop(time, wall, duration, opts);
+    const g = ctx.createGain();
+    applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
+    g.connect(this.boost);
+    const plan = makeShiftPlanner(buf.getChannelData(0), buf.sampleRate, { startSec, endSec, fit, ratio, loop });
+    const rho = fit * ratio;
+    const rec = { g, srcs: new Set(), timer: null, end: stopTime, dead: false };
+    const finish = () => {
+      if (rec.dead) return;
+      rec.dead = true;
+      if (rec.timer != null) clearTimeout(rec.timer);
+      this._shifted?.delete(rec);
+      setTimeout(() => { try { g.disconnect(); } catch {} }, Math.max(0, (rec.end - ctx.currentTime) * 1000) + 200);
+    };
+    // what noteOff and silence() call: fade from here, and no more grains
+    rec.src = { stop: (at) => { rec.end = Math.min(rec.end, at); for (const x of rec.srcs) { try { x.stop(at); } catch {} } finish(); } };
+    const drain = () => {
+      rec.timer = null;
+      const until = ctx.currentTime + 0.25;
+      for (;;) {
+        if (rec.pending == null) rec.pending = plan.next();
+        const gr = rec.pending;
+        if (!gr || time + gr.t >= rec.end) { finish(); return; }
+        if (time + gr.t > until) break;
+        rec.pending = null;
+        const at = time + gr.t;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = rho;
+        const wg = ctx.createGain();
+        wg.gain.setValueCurveAtTime(gr.first ? SHIFT_HEAD : SHIFT_HANN, at, SHIFT_GRAIN);
+        src.connect(wg).connect(g);
+        const room = (loop ? buf.duration : endSec) - gr.pos;
+        src.start(at, gr.pos, Math.max(0.001, Math.min(SHIFT_GRAIN * rho, room)));
+        src.stop(Math.min(at + SHIFT_GRAIN, rec.end) + 0.01);
+        rec.srcs.add(src);
+        src.onended = () => { rec.srcs.delete(src); try { wg.disconnect(); } catch {} };
+      }
+      rec.timer = setTimeout(drain, 80);
+    };
+    (this._shifted ||= new Set()).add(rec);
+    drain();
+    return rec;
   }
   // Held-note support for the computer keyboard: start the region/slice with a
   // long duration (loops sustain; one-shots play through) and fade it out on
@@ -1662,6 +1728,14 @@ export class SamplerVoice {
       rate = sampleHitRate(this.baseRate, midiNote, opts);
     }
     const sopts = { startOffset: start, endOffset: end, fadeIn, fadeOut, loopMode };
+    const sliced = !!(tr?.sliceOn && Array.isArray(tr.slices) && tr.slices.length);
+    const shifted = sliced ? null : this._hitShifted(midiNote, time, 30, velocity, { ...opts, ...sopts, playMode: "trigger" });
+    if (shifted) {
+      const was = this._held.get(midiNote);
+      if (was) this._stopHeld(was, time);
+      this._held.set(midiNote, { src: shifted.src, g: shifted.g, oneShot: loopMode === "off" });
+      return;
+    }
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, 30, sopts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), sopts);
@@ -1697,6 +1771,10 @@ export class SamplerVoice {
     // that behind the master ramp; a session load did not.
     for (const s of this.active) fadeStop(s, s._g || null, now);
     this.active.clear();
+    for (const rec of [...(this._shifted || [])]) {
+      try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setValueAtTime(rec.g.gain.value, now); rec.g.gain.linearRampToValueAtTime(0, now + 0.006); } catch {}
+      rec.src.stop(now + 0.01);
+    }
   }
   dispose() {
     this.silence(this.ctx.currentTime);

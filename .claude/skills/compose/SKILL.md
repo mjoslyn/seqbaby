@@ -178,6 +178,13 @@ after a fill, toms only in fills. In code, `.bank("salamander")` (or
 `virtuosity`, `drskit`) maps `bd sd rim hh oh ht lt rd cr` onto them.
 `describe_engine` `sampler` lists every bundled sample.
 
+A sampler ignores a step's note unless told otherwise (`set_track`
+`samplePitch`): `"speed"` resamples it, so a higher note is shorter, which
+suits a drum tuned a step or two; `"shift"` changes the pitch and keeps the
+length, which is the one for a melody on a vocal chop, a chord stab or a
+found sound (keep it within an octave of the original, it gets grainy past
+that). Notes are measured from C4 (C2 on a drum kit).
+
 Where `search_sounds` is offered, a sampler can also play a recording from
 freesound.org (CC0 only): search for the plain thing ("rimshot dry", "vinyl
 crackle", "rain on window"), pick by name, tags and length since you cannot

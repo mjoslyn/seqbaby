@@ -372,6 +372,82 @@ const SOUND_FIND = (what) => `
 // Put a bundled sample on a track, switching it to the sampler if it is not
 // one already. Shared by the sampler's source picker and the instrument
 // picker's samples tab.
+/**
+ * The sample editor's search: one box over the bundled samples (matched as
+ * you type, by name and kit) and freesound.org (asked on enter). ▶ hears a
+ * result, its name loads it onto the track. Resolves true when one was loaded.
+ */
+export function openSampleFinder(t) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "sq-modal sq-sampler__src-modal sq-sampler__finder";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.innerHTML = `
+      <div class="sq-modal__title">find a sample</div>
+      <div class="sq-sampler__find">
+        <div class="sq-sampler__find-bar"><input type="search" placeholder="kick, snare, rain, door…" aria-label="search the bundled samples and freesound" maxlength="100" /><button type="button" class="sq-sampler__find-go sq-btn" title="search freesound.org too (free to use, CC0)">freesound</button></div>
+        <div class="sq-sampler__src-sep">bundled</div>
+        <div class="sq-sampler__finder-own"></div>
+        <div class="sq-sampler__src-sep">freesound.org (free to use, CC0): press enter</div>
+        <div class="sq-sampler__find-list"></div>
+      </div>
+      <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    let stopFind = null, own = null, ownBtn = null, done = false;
+    const stopOwn = () => { if (own) { own.pause(); own = null; } if (ownBtn) { ownBtn.textContent = "▶"; ownBtn = null; } };
+    const finish = (ok) => {
+      if (done) return;
+      done = true; stopOwn(); stopFind?.(); overlay.remove();
+      resolve(!!ok);
+    };
+    stopFind = attachSoundSearch(modal, t, "sampler", 10, finish);
+    const input = modal.querySelector("input");
+    const list = modal.querySelector(".sq-sampler__finder-own");
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const paint = () => {
+      const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const hits = BUNDLED_SAMPLES.filter((b) => {
+        const hay = `${b.label} ${SAMPLE_KIT_LABELS[b.kit] || b.kit} ${b.id}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      });
+      const shown = hits.slice(0, 40);
+      list.innerHTML = shown.length
+        ? shown.map((b) => `<div class="sq-sampler__find-row">
+            <button type="button" class="sq-btn--ghost" data-hear="${esc(b.id)}" aria-label="hear ${esc(b.label)}" title="hear it">▶</button>
+            <button type="button" class="sq-btn--ghost sq-sampler__find-pick" data-own="${esc(b.id)}" title="load it onto this track"><b>${esc(b.label)}</b><span>${esc(SAMPLE_KIT_LABELS[b.kit] || b.kit)}</span></button>
+          </div>`).join("") + (hits.length > shown.length ? `<div class="sq-sampler__find-note">${hits.length - shown.length} more: type to narrow</div>` : "")
+        : `<div class="sq-sampler__find-note">no bundled sample matches</div>`;
+    };
+    input.addEventListener("input", () => { stopOwn(); paint(); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Escape") finish(false); });
+    list.addEventListener("click", async (e) => {
+      const hear = e.target.closest("[data-hear]"), pick = e.target.closest("[data-own]");
+      if (hear) {
+        const was = ownBtn; stopOwn();
+        if (was === hear) return;
+        own = new Audio(bundledSampleUrl(hear.dataset.hear));
+        ownBtn = hear; hear.textContent = "■";
+        own.addEventListener("ended", stopOwn);
+        own.play().catch(stopOwn);
+      } else if (pick) {
+        const b = BUNDLED_SAMPLES.find((x) => x.id === pick.dataset.own);
+        if (!b) return;
+        stopOwn();
+        await loadBundledSample(t, b.id, b.label);
+        finish(true);
+      }
+    });
+    modal.querySelector(".sq-sampler__src-cancel").addEventListener("click", () => finish(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
+    paint();
+    input.focus();
+  });
+}
+
 export async function loadBundledSample(t, id, label) {
   t.sampleSource = { kind: "bundled", id, name: label };
   t.uploadBuffer = null; t.uploadAudio = null; t.uploadFileName = label;

@@ -3390,7 +3390,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   matrix and lanes with no code of its own; signal.js reads "master" as its
   input (`mixOutNode`, used by `outputTargetFor` and the landing gain), and
   `sendOf` follows it, so solo and the noise beds see the chain. Drawn as a
-  sheet at the desk's right holding the bus's OWN track card (`seatMaster`,
+  full-width sheet from the bottom holding the bus's OWN track card (`seatMaster`,
   mixView.js: the `.sq-track` moved into `.sq-mix__master-card` after every
   paint and put back when the sheet hides or the view closes, as the detail's
   is), so it is a whole fx bus track there: the fx picker, filter, eq, comp,
@@ -3442,10 +3442,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   resized by the same drag (viewSplit.js's `topPx` reads the fraction there,
   since the top pane's height is no longer the handle's place). The
   footer drawer's `instrument` toggles it, selecting a strip opens it, its × closes
-  it. The master fx bus's card is a sheet at the right
+  it. The master fx bus's card is a sheet in the same place
   (`.sq-mix__master`, a sibling of the desk made in `installMixView`, since
-  the desk is repainted by innerHTML; absolute in the section, so it stays
-  put while the desk scrolls): the footer's `master fx` makes the bus the first time and
+  the desk is repainted by innerHTML; `has-mfx` shows the split's handle over
+  it, so the same drag resizes it), and the two are one at a time (`setSheet`):
+  the footer's `master fx` makes the bus the first time and
   shows / hides the sheet after that (the bus stays in the path hidden; the
   sheet's `remove` takes it off).
   The toggles live in a FOOTER DRAWER (`.sq-mix__foot`, made once in
@@ -6543,6 +6544,34 @@ still stops with its note; a slice plays through unless set to gate; a
 computer-keyboard key let go leaves a triggered one-shot to play out. It
 rides in `sampleDefaults`, so save, undo, a patch and a jam carry it. The
 builder: `setTrack`'s `samplePlay` (MCP `set_track`). `test/samplePlay.test.js`.
+
+**The sampler's pitch select** (`.sq-samp__pitchlock`, the sample editor;
+`samplePitchMode`, buffers.js). `pitch lock`: a step's note is ignored
+(`t.pitchLock`, the checkbox this was). `follow notes: speed`: the note
+resamples the sample, so higher is shorter (`pitchLock` false). `follow
+notes: keep length` (`sampleDefaults.pitch: "shift"`, with `pitchLock`
+false, so it rides where `play` does and an older reader hears `speed`): the
+note changes the pitch and the length stays. The hit's opts carry
+`pitchShift`, and `SamplerVoice._hitShifted` plays the region as overlapping
+grains (`SHIFT_GRAIN` 70ms, one every `SHIFT_HOP` 35ms, Hann windows, the
+first starting full so the attack is kept), each resampled by fit x ratio
+while the place they are read from moves at the fit speed. Each grain's start
+is searched 12ms either side for the waveform that best matches where the
+last grain has got to (`makeShiftPlanner`, WSOLA, pure and tested: a held
+sine keeps its level), since plain overlap-add flutters at the hop rate.
+Grains are built a quarter second ahead off a timer the hit owns, as the
+granular voice's are. A note at the sample's own pitch takes the ordinary
+path. Limits: it is a granular shifter, so drums smear a little and a big
+shift sounds grainy; slices are not shifted; ping-pong loops forward. The
+builder: `setTrack`'s `samplePitch` (MCP `set_track`).
+`test/samplePitch.test.js`.
+
+**The sample editor's search** (the magnifier beside its file select;
+`openSampleFinder`, main.js): one box over the bundled samples (matched as
+you type, by name and kit, ▶ to hear) and freesound.org (on enter,
+`attachSoundSearch`). A pick loads through `loadBundledSample` /
+`putAudioOnTrack` and the editor resets its region and slices, as its
+select does.
 
 **Sounds from freesound.org** (`lib/freesound.js`, the `FREESOUND_API_KEY`
 secret; without it nothing below is offered). CC0 only: the search asks for
