@@ -1618,7 +1618,9 @@ export class SamplerVoice {
       const end = Math.max(start + 0.001, Math.min(1, rawEnd));
       const sopts = { startOffset: start, endOffset: end, fadeIn: sd.fadeIn ?? 0, fadeOut: sd.fadeOut ?? 0, loopMode: "off" };
       const regionWall = ((end - start) * this.buffer.duration) / Math.max(0.01, this.baseRate);
-      const { src, stopTime } = startSampleSource(this.ctx, this.buffer, this.baseRate, time, Math.max(0.05, regionWall), sopts);
+      // A slice plays through (it is a trigger) unless the track is set to gate.
+      const sliceDur = sd.play === "gate" ? Math.min(regionWall, Math.max(0.02, duration)) : Math.max(0.05, regionWall);
+      const { src, stopTime } = startSampleSource(this.ctx, this.buffer, this.baseRate, time, sliceDur, sopts);
       const g = this.ctx.createGain();
       applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), sopts);
       src.connect(g).connect(this.boost);
@@ -1670,12 +1672,15 @@ export class SamplerVoice {
     src.onended = () => this.active.delete(src);
     const prev = this._held.get(midiNote);
     if (prev) this._stopHeld(prev, time);
-    this._held.set(midiNote, { src, g });
+    this._held.set(midiNote, { src, g, oneShot: loopMode === "off" });
   }
   noteOff(midiNote, time) {
     const rec = this._held?.get(midiNote);
     if (!rec) return;
     this._held.delete(midiNote);
+    // Set to trigger, a key let go leaves a one-shot to play out (a loop has
+    // no end of its own, so it still stops with the key).
+    if (rec.oneShot && this.track?.sampleDefaults?.play === "trigger") return;
     this._stopHeld(rec, time);
   }
   _stopHeld(rec, time) {

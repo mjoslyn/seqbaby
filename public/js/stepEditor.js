@@ -1,6 +1,6 @@
 import { FX_STAGE_LEVEL_KEY } from "./constants.js";
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_KIT_LABELS, bundledSampleUrl, engineByKey } from "./catalog.js";
-import { loadBuffer } from "./buffers.js";
+import { loadBuffer, samplePlayMode } from "./buffers.js";
 import { isPhoneLayout, setStatus } from "./dom.js";
 import { renderEuclidPanel } from "./euclid.js";
 import { renderChancePanel } from "./chance.js";
@@ -750,6 +750,9 @@ export function openSampleEditorModal(t) {
       <label>loop <select class="sq-samp__loop">
         <option value="off">off</option><option value="loop">loop</option><option value="pingpong">ping-pong</option>
       </select></label>
+      <span class="sq-samp__play" role="group" aria-label="how a note plays the sample">
+        <button type="button" class="sq-btn--ghost" data-play="trigger" title="trigger: a note plays the whole sample (or region), however short the step. A looped sample still stops with its note">trigger</button><button type="button" class="sq-btn--ghost" data-play="gate" title="gate: the sample stops when the step ends, so the note's length is the sound's length">gate</button>
+      </span>
       <button type="button" class="sq-samp__preview sq-btn--ghost">preview</button>
     </div>
     <div class="sq-samp__row">
@@ -949,6 +952,12 @@ export function openSampleEditorModal(t) {
   fitSel.addEventListener("change", () => { t.sampleSpeedMode = fitSel.value || "native"; applySampleSpeed(t); });
   plCb.addEventListener("change", () => { t.pitchLock = plCb.checked; });
   loopSel.addEventListener("change", () => { sd.loopMode = loopSel.value; });
+  // trigger / gate: unset is what the track always did (a drum kit rings on,
+  // anything else stops with its note), shown as the nearer of the two.
+  const playBtns = [...modal.querySelectorAll(".sq-samp__play [data-play]")];
+  const paintPlay = () => { const m = samplePlayMode(t); for (const b of playBtns) { const on = b.dataset.play === m; b.classList.toggle("is-on", on); b.setAttribute("aria-pressed", String(on)); } };
+  for (const b of playBtns) b.addEventListener("click", () => { sd.play = b.dataset.play; paintPlay(); });
+  paintPlay();
   fiI.addEventListener("input", () => { const v = Math.max(0, Math.min(2, Number(fiI.value) || 0)); sd.fadeIn = v; fiL.textContent = fmtFade(v); });
   foI.addEventListener("input", () => { const v = Math.max(0, Math.min(2, Number(foI.value) || 0)); sd.fadeOut = v; foL.textContent = fmtFade(v); });
   onCb.addEventListener("change", () => { t.sliceOn = onCb.checked; });

@@ -68,8 +68,16 @@ export function startSampleSource(ctx, buffer, rate, time, duration, opts) {
     // sample. Drum-kit hits keep a 0.5s ring-out grace so a 16th-note step
     // doesn't chop a kick/snare tail. Either way, never play past the sample's
     // own end (wallTime).
-    const gate = opts?.isDrumKit ? duration + 0.5 : duration;
-    stopTime = time + Math.min(wallTime, Math.max(0.1, gate));
+    // opts.playMode says otherwise when the track's switch has been set:
+    // "trigger" plays the whole region whatever the note's length, "gate"
+    // stops with the note, a drum kit included.
+    const mode = opts?.playMode;
+    if (mode === "trigger") stopTime = time + wallTime;
+    else if (mode === "gate") stopTime = time + Math.min(wallTime, Math.max(0.02, duration));
+    else {
+      const gate = opts?.isDrumKit ? duration + 0.5 : duration;
+      stopTime = time + Math.min(wallTime, Math.max(0.1, gate));
+    }
     src.start(time, startSec, playLenSource);
   }
   return { src, stopTime };
@@ -89,6 +97,15 @@ export function applySampleFadeEnvelope(gainNode, time, stopTime, v, opts) {
   gainNode.gain.linearRampToValueAtTime(v, peakStart);
   gainNode.gain.setValueAtTime(v, peakEnd);
   gainNode.gain.linearRampToValueAtTime(0, stopTime);
+}
+
+/** A sampler track's trigger / gate switch as it stands: what was picked
+ *  (`sampleDefaults.play`), else what an untouched track does, which is a
+ *  drum kit ringing on (half a second past its step) and anything else
+ *  stopping with its note. */
+export function samplePlayMode(t) {
+  const p = t?.sampleDefaults?.play;
+  return p === "trigger" || p === "gate" ? p : (t?.isDrumKit ? "trigger" : "gate");
 }
 
 export function trimSilenceFromBuffer(buf, { threshold = 0.004, padMs = 8 } = {}) {

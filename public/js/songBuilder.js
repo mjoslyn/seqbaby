@@ -537,6 +537,11 @@ export function setTrack(song, index, opts = {}) {
   if (opts.density != null) t.density = num(opts.density, "density", 0, 1);
   if (opts.drumKit != null) t.isDrumKit = !!opts.drumKit;
   if (opts.pitchLock != null) t.pitchLock = !!opts.pitchLock;
+  if (opts.samplePlay != null) {
+    if (t.engineKey !== "sampler") fail(`\`samplePlay\` only applies to a sampler track (this one is ${t.engineKey})`);
+    if (opts.samplePlay !== "trigger" && opts.samplePlay !== "gate") fail('`samplePlay` is "trigger" (a note plays the whole sample) or "gate" (it stops when the step ends)');
+    t.sampleDefaults = { ...(t.sampleDefaults || {}), play: opts.samplePlay };
+  }
   if (opts.sampleSpeedMode != null) t.sampleSpeedMode = oneOf(opts.sampleSpeedMode, "sampleSpeedMode", ["native", "1xbpm"]);
   if (opts.out != null) {
     if (opts.out === "master" || opts.out === -1) t.outIndex = -1;

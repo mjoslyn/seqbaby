@@ -713,6 +713,7 @@ export async function startPlayback(opts = {}) {
                 fadeIn:      sd.fadeIn  ?? 0,
                 fadeOut:     sd.fadeOut ?? 0,
                 loopMode:    sd.loopMode ?? "off",
+                playMode:    sd.play,
                 pitchBase:   t.isDrumKit ? 36 : 60,
                 isDrumKit:   t.isDrumKit,
                 // Propagate the time-sync mode so the voice can re-fit the rate

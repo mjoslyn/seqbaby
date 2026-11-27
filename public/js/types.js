@@ -111,7 +111,10 @@
 
 /** @typedef {Object} SampleDefaults
  * @property {number} start @property {number} end @property {number} fadeIn
- * @property {number} fadeOut @property {"off"|"loop"|"pingpong"} loopMode */
+ * @property {number} fadeOut @property {"off"|"loop"|"pingpong"} loopMode
+ * @property {"trigger"|"gate"} [play] a note plays the whole sample, or the
+ *   sample stops with the note; unset is the old rule (a drum kit rings half
+ *   a second past its step, anything else stops with it) */
 
 /**
  * The stock synth params, repurposed per engine (see updatePlaitsControlsVisibility).

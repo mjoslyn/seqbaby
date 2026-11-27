@@ -6525,6 +6525,20 @@ Strudel reaches them with `.bank("salamander" | "virtuosity" | "drskit")`;
 `describe_engine sampler` lists every bundled sample, because the compose
 panel has the MCP tools but not its resources.
 
+**The sampler's trigger / gate switch** (`sampleDefaults.play`, two buttons
+in the sample editor beside `loop`). `trigger`: a note plays the whole
+sample or region whatever the step's length. `gate`: it stops when the step
+ends, a drum kit included. Unset is the rule there always was (a drum kit
+rings half a second past its step, anything else stops with its note), so
+no saved song changes; the buttons light the nearer of the two
+(`samplePlayMode`, buffers.js) and a click makes it the track's own. The
+rule itself is one branch in `startSampleSource` (`opts.playMode`, passed by
+the transport and `hitOptsFor`). A looped sample has no end of its own and
+still stops with its note; a slice plays through unless set to gate; a
+computer-keyboard key let go leaves a triggered one-shot to play out. It
+rides in `sampleDefaults`, so save, undo, a patch and a jam carry it. The
+builder: `setTrack`'s `samplePlay` (MCP `set_track`). `test/samplePlay.test.js`.
+
 **Sounds from freesound.org** (`lib/freesound.js`, the `FREESOUND_API_KEY`
 secret; without it nothing below is offered). CC0 only: the search asks for
 the licence and every result's own licence is checked again (`soundFromApi`,

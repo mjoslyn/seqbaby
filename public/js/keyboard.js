@@ -115,7 +115,7 @@ export function hitOptsFor(t) {
   const sd = t.sampleDefaults || {};
   return {
     startOffset: sd.start ?? 0, endOffset: sd.end ?? 1,
-    fadeIn: sd.fadeIn ?? 0, fadeOut: sd.fadeOut ?? 0, loopMode: sd.loopMode ?? "off",
+    fadeIn: sd.fadeIn ?? 0, fadeOut: sd.fadeOut ?? 0, loopMode: sd.loopMode ?? "off", playMode: sd.play,
     pitchBase: t.isDrumKit ? 36 : 60, isDrumKit: t.isDrumKit,
     sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false,
   };

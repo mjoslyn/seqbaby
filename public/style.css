@@ -2810,6 +2810,11 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-samp__slice-row { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
 .sq-samp__row select, .sq-slice__row select, .sq-slice__row input[type="number"] { font-size: 11px; padding: 2px 4px; }
 .sq-samp__row .sq-knob { --knob-size: 38px; }
+.sq-samp__play { display: inline-flex; }
+.sq-samp__play button { font-size: 11px; padding: 3px 8px; border-radius: 0; }
+.sq-samp__play button:first-child { border-radius: 4px 0 0 4px; }
+.sq-samp__play button:last-child { border-radius: 0 4px 4px 0; margin-left: -1px; }
+.sq-samp__play button.is-on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .sq-slice__pads { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow-y: auto; }
 .sq-slice__pad { font-size: 10px; padding: 4px 6px; min-width: 34px; }
 .sq-slice__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
