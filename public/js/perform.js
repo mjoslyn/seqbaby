@@ -19,6 +19,7 @@
  * pads store their tracks); which one is in force is not.
  */
 import { setStatus } from "./dom.js";
+import { ICON_LIVE } from "./icons.js";
 import { applyBusMute, refreshMuteSoloUI } from "./render.js";
 import { refreshNoiseBeds, releaseSilencedTracks } from "./signal.js";
 import { inSong, state } from "./state.js";
@@ -205,8 +206,98 @@ function initMuteScenes() {
   paintMuteScenes();
 }
 
+// ---- the phone's live menu ------------------------------------------------------
+//
+// Below 768px master, cue, the track switcher, fill and the mute scenes are
+// hidden in the transport (style.css) and #perf-menu-btn hosts them in one
+// modal. MOVED, not rebuilt, as openChordMenu moves the scale row: master.js,
+// cue.js, trackSwitch.js and the listeners above all find their own elements
+// by id, so nothing about them changes.
+
+let _perfMenu = null;
+
+/** The button is lit while anything behind it is on. */
+export function syncPerformMenuBtn() {
+  const btn = document.getElementById("perf-menu-btn");
+  if (!btn) return;
+  if (!btn.firstElementChild) btn.innerHTML = ICON_LIVE;
+  const on = !!state.fill
+    || !!document.querySelector("#master-btn.is-on, #cue-btn.is-on, #mute-scenes button[aria-pressed='true']");
+  btn.setAttribute("aria-pressed", String(on));
+}
+
+export function openPerformMenu() {
+  if (_perfMenu) return;
+  const pick = (sel) => document.querySelector(sel);
+  const rows = [
+    ["the mix", [pick("#master-btn"), pick("#cue-btn")]],
+    ["go to a track", [pick(".sq-track-switch")]],
+    ["play", [pick("#perf")]],
+  ].map(([label, els]) => [label, els.filter(Boolean)]).filter(([, els]) => els.length);
+  if (!rows.length) return;
+  const moved = rows.flatMap(([, els]) => els).map(el => ({ el, parent: el.parentNode, next: el.nextSibling }));
+
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-perf__menu-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  const title = document.createElement("div");
+  title.className = "sq-modal__title";
+  title.textContent = "live";
+  modal.appendChild(title);
+  for (const [label, els] of rows) {
+    const row = document.createElement("div");
+    row.className = "sq-perf__menu-row";
+    const cap = document.createElement("span");
+    cap.textContent = label;
+    row.append(cap, ...els);
+    modal.appendChild(row);
+  }
+  const note = document.createElement("div");
+  note.className = "sq-modal__body";
+  note.textContent = "fill: hold it, or tap to latch. mutes: tap an empty slot to store the mutes as they are, tap it again to go back, long-press to store over it.";
+  modal.appendChild(note);
+  const done = document.createElement("button");
+  done.type = "button";
+  done.className = "sq-panel__modal-close";
+  done.textContent = "done";
+  modal.appendChild(done);
+
+  const close = () => {
+    if (!_perfMenu) return;
+    _perfMenu = null;
+    for (const m of moved) {
+      if (m.next && m.next.parentNode === m.parent) m.parent.insertBefore(m.el, m.next);
+      else m.parent.appendChild(m.el);
+    }
+    overlay.remove();
+    document.removeEventListener("keydown", esc);
+    syncPerformMenuBtn();
+  };
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  done.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", esc);
+  // Drill down, do not stack: master and cue open panels of their own, and a
+  // track picked here is one to look at, so each closes this first. Capture
+  // phase, so the buttons are back in the transport before their own
+  // handlers run (a click's path is fixed when it is dispatched).
+  modal.addEventListener("click", (e) => { if (e.target.closest?.("#master-btn, #cue-btn")) close(); }, true);
+  modal.addEventListener("change", (e) => { if (e.target.id === "track-switch") close(); });
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  _perfMenu = { close };
+}
+
 /** Wire the cluster. Called once from init(). */
 export function initPerform() {
   initFill();
   initMuteScenes();
+  document.getElementById("perf-menu-btn")?.addEventListener("click", openPerformMenu);
+  syncPerformMenuBtn();
+  // master and cue come and go with a song or a panel, not with this menu
+  for (const ev of ["seqbaby:setapplied", "seqbaby:newset", "seqbaby:songedited"]) window.addEventListener(ev, () => setTimeout(syncPerformMenuBtn, 0));
 }

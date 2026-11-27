@@ -3522,28 +3522,30 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   /* Macro sits in the main cluster, ahead of the others in the markup, so it
      is ordered after them explicitly: last in the group, after session. */
   .sq-transport #macro-pads { order: 3; }
-  /* fill, the mute scenes and master: a line of their own under the icons */
-  .sq-transport .sq-perf { order: 4; flex: 1 1 auto; justify-content: space-between; }
-  .sq-transport #master-btn, .sq-transport #cue-btn { order: 4; flex: 0 0 auto; }
-  .sq-transport .sq-track-switch { order: 4; flex: 1 1 110px; min-width: 0; }
-  .sq-transport .sq-track-switch select { flex: 1 1 auto; min-width: 0; max-width: none; min-height: 40px; }
-  .sq-transport .sq-perf #fill-btn, .sq-transport #master-btn, .sq-transport #cue-btn { min-height: 40px; padding: 0 14px; }
-  .sq-transport .sq-mute-scenes button { min-height: 40px; min-width: 40px; }
+  /* master, cue, the track switcher, fill and the mute scenes move into the
+     live modal on a phone (#perf-menu-btn, openPerformMenu). Scoped to the
+     transport so each shows again once moved into the modal. */
+  .sq-transport .sq-perf,
+  .sq-transport #master-btn,
+  .sq-transport #cue-btn,
+  .sq-transport .sq-track-switch { display: none !important; }
+  .sq-transport #perf-menu-btn { order: 3; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
   .sq-transport #metronome,
   .sq-transport #pattern-menu-btn,
+  .sq-transport #perf-menu-btn,
   .sq-transport #macro-pads {
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    /* One line of six whatever the phone: 50px where it fits, narrower where
-       it does not (a 320px screen gets ~46px). 44px is the transport's side
-       padding (16) plus the five gaps between the six (28). A flex item
+    /* One line of seven whatever the phone: 50px where it fits, narrower
+       where it does not (a 320px screen gets ~38px). 52px is the transport's
+       side padding (16) plus the gaps between the seven (34), with 2 spare. A flex item
        wraps at its full size rather than shrinking first, so the width has
        to be worked out up front like this, not left to flex-shrink. */
-    width: clamp(40px, calc((100vw - 44px) / 6), 50px);
+    width: clamp(38px, calc((100vw - 52px) / 7), 50px);
     min-width: 0;
     height: auto;
     min-height: 50px;
@@ -3555,6 +3557,7 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   .sq-transport #chord-menu-btn .sq-btn-icon,
   .sq-transport #metronome .sq-btn-icon,
   .sq-transport #pattern-menu-btn .sq-btn-icon,
+  .sq-transport #perf-menu-btn .sq-btn-icon,
   .sq-transport #macro-pads .sq-btn-icon { width: 18px; height: 18px; }
   .sq-transport #macro-pads { display: inline-flex; }   /* not an .sq-icon-btn */
   .sq-transport #macro-pads .sq-btn-icon { display: block; }
@@ -3564,7 +3567,8 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   .sq-transport .sq-history [data-label]::after,
   .sq-transport #chord-menu-btn[data-label]::after,
   .sq-transport #metronome[data-label]::after,
-  .sq-transport #pattern-menu-btn[data-label]::after {
+  .sq-transport #pattern-menu-btn[data-label]::after,
+  .sq-transport #perf-menu-btn[data-label]::after {
     content: attr(data-label);
     font-size: 10px;
     letter-spacing: 0;
@@ -3575,6 +3579,7 @@ a.sq-modal__ok:active { transform: translateY(1px); }
   .sq-transport #metronome[data-label]::after { position: relative; }
   /* Its caption carries note names (C#, not c#). */
   .sq-transport #chord-menu-btn[data-label]::after { text-transform: none; }
+  .sq-transport #perf-menu-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
   .sq-transport #chord-menu-btn[aria-pressed="true"] {
     background: var(--accent-2);
     color: #0b0d10;
@@ -5474,3 +5479,17 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
 #set-record.is-armed { border-color: #e5484d; color: #e5484d; animation: sq-set-armed 1s steps(2, start) infinite; }
 #set-record.is-recording { background: #e5484d; border-color: #e5484d; color: #fff; }
 @keyframes sq-set-armed { to { opacity: 0.45; } }
+
+/* The phone's live modal (openPerformMenu): the transport's master, cue,
+   track switcher, fill and mute scenes, moved in while it is open. */
+.sq-perf__menu-modal { display: flex; flex-direction: column; gap: 14px; }
+.sq-perf__menu-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sq-perf__menu-row > span { flex: 0 0 100%; font-size: 11px; color: var(--fg-dim); }
+.sq-perf__menu-modal #master-btn,
+.sq-perf__menu-modal #cue-btn,
+.sq-perf__menu-modal #fill-btn { min-height: 44px; padding: 0 16px; flex: 1 1 0; }
+.sq-perf__menu-modal .sq-track-switch { flex: 1 1 100%; font-size: 13px; }
+.sq-perf__menu-modal .sq-track-switch select { flex: 1 1 auto; min-width: 0; max-width: none; min-height: 44px; }
+.sq-perf__menu-modal .sq-perf { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 10px; }
+.sq-perf__menu-modal .sq-mute-scenes { flex: 1 1 100%; }
+.sq-perf__menu-modal .sq-mute-scenes button { min-height: 44px; flex: 1 1 0; }

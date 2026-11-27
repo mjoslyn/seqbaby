@@ -752,6 +752,11 @@ export const STUDIO_BODY = String.raw`
         <button type="button" data-scene="3" aria-pressed="false">4</button>
       </div>
     </div>
+    <!-- Mobile only: master, cue, the track switcher, fill and the mute
+         scenes are hidden in the transport below 768px and this button hosts
+         them in one modal (openPerformMenu, perform.js). Lit while any of
+         them is on. -->
+    <button id="perf-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="live" type="button" aria-pressed="false" aria-label="live controls: master, cue, go to a track, fill and mute scenes" title="live: master, cue, go to a track, fill and the mute scenes"></button>
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>

@@ -80,7 +80,7 @@ function openAudioGate() {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="sq-audio__gate-title">tap to enable audio</div>
-    <div class="sq-audio__gate-note"><strong>best on a laptop.</strong> your phone&rsquo;s battery will thank you.</div>
+    <div class="sq-audio__gate-note"><strong>headphones on.</strong> the bass lives below what a phone speaker can play.</div>
     <div class="sq-audio__gate-hint" aria-live="polite"></div>
     <button class="sq-audio__gate-btn" type="button">enable audio</button>
     <div class="sq-audio__gate-status"></div>

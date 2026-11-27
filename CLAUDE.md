@@ -4131,8 +4131,14 @@ On desktop it sits on the note row (`.sq-transport__kbd-row`, the scale bar)
 between havoc and code / vim, which moved there with it: the transport's
 first line is play, record, tempo, `master` and the view switch. On a phone
 the rows dissolve (`display: contents`), so havoc keeps its place in the icon
-row by `order`, and `master`, fill and the mutes make a line of their own
-under it (all three `order: 4`); code and vim are hidden there as before.
+row by `order`; `master`, `cue`, the track switcher, fill and the mutes are
+hidden in the transport there and sit behind a seventh icon button, `live`
+(`#perf-menu-btn`, `openPerformMenu` in perform.js): one modal they are
+MOVED into and back out of, as `openChordMenu` moves the scale row, so
+master.js, cue.js and trackSwitch.js find their elements by id as ever. A
+tap on master or cue, or a track picked, closes it first (panels drill
+down, they do not stack). The button is lit while any of them is on
+(`syncPerformMenuBtn`). Code and vim are hidden there as before.
 
 - **Fill is `state.fill`**, which only trig conditions read. Hold the button
   for as long as the fill lasts; a press shorter than 260ms latches it until
@@ -4503,8 +4509,8 @@ setting is in its title and accessible name), because on a phone the button is
 all of either you can see.
 On a phone those buttons (undo, redo, scale, the metronome, the session
 menu's `#pattern-menu-btn` and `#macro-pads`, ordered last) break onto a line
-together, on one line at any phone width (their width is
-`clamp(40px, (100vw - 44px) / 6, 50px)`, since a flex item wraps at its full
+together with `live` after them, on one line at any phone width (their width is
+`clamp(38px, (100vw - 52px) / 7, 50px)`, since a flex item wraps at its full
 size before it would shrink): they sit in two
 different transport clusters on desktop, so rather than a wrapper that would
 drag the metronome along, `.sq-transport::before` is a line break ordered in
