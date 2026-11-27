@@ -135,27 +135,33 @@ When you're done, stop calling tools and reply in plain, friendly, non-technical
   return cachedSystem;
 }
 
-let cachedTools = null;
+const cachedTools = new Map();
 /** The tool table as Anthropic tool definitions, from zod's own JSON Schema
  *  conversion so the schema an agent sees can't drift from what the handler
  *  accepts. Stable between calls, which is also what lets it be cached. */
-export function anthropicTools() {
-  if (!cachedTools) {
-    cachedTools = TOOLS.map((t) => {
+export function anthropicTools({ sounds = false } = {}) {
+  // A tool that needs something the deploy may not have (a freesound key) is
+  // left out where it is missing, rather than offered and refused.
+  if (!cachedTools.has(sounds)) {
+    cachedTools.set(sounds, TOOLS.filter((t) => !t.needs || (t.needs === "sounds" && sounds)).map((t) => {
       const schema = z.toJSONSchema(z.object(t.inputSchema));
       delete schema.$schema;
       return { name: t.name, description: t.description, input_schema: schema };
-    });
+    }));
   }
-  return cachedTools;
+  return cachedTools.get(sounds);
 }
 
 /** A context holding the studio's current session, or a blank song. */
-export function newCtx(session) {
+export function newCtx(session, { soundsKey = null } = {}) {
   return {
     song: session && typeof session === "object" ? sb.fromBlob(session) : sb.newSong(),
     songName: null,
     songGenre: null,
+    // freesound (lib/freesound.js): the key, and what the turn has spent
+    soundsKey: soundsKey || null,
+    soundSearches: 0,
+    soundsTaken: 0,
   };
 }
 
@@ -171,10 +177,15 @@ export function serializeCtx(ctx) {
 export function runTool(ctx, name, args) {
   const t = TOOLS.find((t) => t.name === name);
   if (!t) return { ok: false, error: `unknown tool ${name}` };
+  const bad = (e) => ({ ok: false, error: e?.name === "SongError" ? e.message : `error: ${e?.message ?? e}` });
   try {
-    return { ok: true, result: t.handler(ctx, args ?? {}) };
+    const out = t.handler(ctx, args ?? {});
+    // A handler that reaches the network (the freesound pair) answers with a
+    // promise; every other one is synchronous, and so is its result.
+    if (out && typeof out.then === "function") return out.then((result) => ({ ok: true, result }), bad);
+    return { ok: true, result: out };
   } catch (e) {
-    return { ok: false, error: e?.name === "SongError" ? e.message : `error: ${e?.message ?? e}` };
+    return bad(e);
   }
 }
 
@@ -233,6 +244,10 @@ export function summarize(name, result) {
   if (name === "add_track" && result && typeof result === "object") {
     return `added ${result.name ?? result.engine}`;
   }
+  if (name === "add_sound_track" && result && typeof result === "object") {
+    return `added ${result.name}, a freesound sample (${result.sound})`;
+  }
+  if (name === "search_sounds") return Array.isArray(result) ? `searched freesound: ${result.length} sounds` : "searched freesound: nothing";
   if (name === "set_steps" && result && typeof result === "object") {
     return `wrote pattern ${result.pattern}: ${result.hits} hits`;
   }
@@ -265,11 +280,14 @@ export async function runComposeTurn({
   // call reads it against the request and its notes are sent back, once
   // (mcp/critic.mjs). Only for a turn that wrote a substantial amount.
   critic = CRITIC_ON,
+  // A freesound.org API key: with one, the turn can search for recorded
+  // sounds and put them on sampler tracks (search_sounds, add_sound_track).
+  soundsKey = /** @type {string | null} */ (null),
   onEvent = async (_event) => {},
 }) {
-  const ctx = newCtx(session);
+  const ctx = newCtx(session, { soundsKey });
   const anthropic = new Anthropic({ apiKey });
-  const tools = anthropicTools();
+  const tools = anthropicTools({ sounds: !!soundsKey });
   const startedAt = Date.now();
   // What the song looked like before the turn. Loading a song back into the
   // studio is not free -- applySet tears down every track and voice and stops
@@ -422,7 +440,7 @@ export async function runComposeTurn({
 
     const results = [];
     for (const tu of toolUses) {
-      const r = runTool(ctx, tu.name, tu.input);
+      const r = await runTool(ctx, tu.name, tu.input);
       if (!r.ok) toolErrors++;
       await onEvent({ type: "tool", name: tu.name, ok: r.ok, summary: r.ok ? summarize(tu.name, r.result) : r.error });
       const text = r.ok ? resultText(tu.name, r.result) : r.error;

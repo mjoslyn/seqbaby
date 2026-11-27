@@ -2824,6 +2824,19 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-sampler__src-item { font-size: 11px; padding: 6px 4px; }
 .sq-sampler__src-kit { grid-column: 1 / -1; font-size: 10px; color: var(--fg-dim); margin-top: 4px; }
 .sq-sampler__src-kit:first-child { margin-top: 0; }
+.sq-sampler__src-modal .sq-sampler__src-list { max-height: 30vh; }
+.sq-sampler__find { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sq-sampler__find-bar { display: flex; gap: 6px; }
+.sq-sampler__find-bar input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 12px; padding: 6px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+.sq-sampler__find-list { display: flex; flex-direction: column; gap: 3px; max-height: 26vh; overflow-y: auto; }
+.sq-sampler__find-list:empty { display: none; }
+.sq-sampler__find-row { display: flex; gap: 4px; min-width: 0; }
+.sq-sampler__find-row > button:first-child { flex: 0 0 34px; }
+.sq-sampler__find-pick { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; text-align: left; font-size: 11px; padding: 6px 8px; }
+.sq-sampler__find-pick b { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-sampler__find-pick span { flex: 0 0 auto; color: var(--fg-dim); font-size: 10px; white-space: nowrap; }
+.sq-sampler__find-note { font-size: 11px; color: var(--fg-dim); text-align: center; padding: 4px 0; }
+.sq-sampler__find-note.is-error { color: var(--accent-2); }
 
 /* Granular WAV viewer modal: waveform canvas + live grain bars. */
 .sq-gwav__modal {

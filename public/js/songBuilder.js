@@ -423,9 +423,12 @@ function resizePattern(pat, n) {
  * Add a track. `engine` is a key or a name (see resolveEngine). A sampler
  * takes `sample` (a bundled sample id or label, e.g. "Techno/kick" or "techno
  * kick"); a granular track takes `texture` (a library texture id or label).
+ * Either takes `upload` instead: audio of its own, `{name, audio (base64),
+ * mime, source?}`, carried in the session as an uploaded sample is (the
+ * compose turn's freesound tool fetches one and hands it in).
  * @returns {{ index: number, engine: string, name: string }}
  */
-export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, texture, drumKit } = {}) {
+export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, texture, upload, drumKit } = {}) {
   const e = resolveEngine(engine);
   const len = int(length, "length", 1, 64);
   const t = {
@@ -443,18 +446,25 @@ export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, t
     patterns: [],
     arrangement: [],
   };
-  if (e.key === "sampler") {
+  const up = upload == null ? null : uploadOf(upload);
+  if (up && e.key !== "sampler" && e.key !== "dm:granular") fail(`\`upload\` only applies to the sampler and granular engines (this track is ${e.key})`);
+  if (up) {
+    if (sample != null || texture != null) fail("give `upload` or a bundled `sample` / `texture`, not both");
+    t.uploadAudio = up.audio; t.uploadAudioMime = up.mime; t.uploadFileName = up.name;
+    if (e.key === "sampler") t.sampleSource = { ...(up.source || {}), kind: "upload", name: up.name };
+  } else if (e.key === "sampler") {
     if (sample == null) fail(`a sampler track needs \`sample\`: one of ${BUNDLED_SAMPLES.map(s => s.id).join(", ")}`);
     const s = findByIdOrLabel(BUNDLED_SAMPLES, sample, "sample");
     t.sampleSource = { kind: "bundled", id: s.id, name: s.label };
   } else if (sample != null) fail(`\`sample\` only applies to the sampler engine (this track is ${e.key})`);
-  if (e.key === "dm:granular") {
+  if (up) { /* its audio is its own */ }
+  else if (e.key === "dm:granular") {
     if (texture == null) fail(`a granular track needs \`texture\`: one of ${GRANULAR_SAMPLES.map(s => s.id).join(", ")}`);
     const s = findByIdOrLabel(GRANULAR_SAMPLES, texture, "texture");
     t.granularSample = { id: s.id, label: s.label };
   } else if (texture != null) fail(`\`texture\` only applies to the granular engine (this track is ${e.key})`);
   t.isDrumKit = drumKit != null ? !!drumKit
-    : DRUM_RE.test(`${e.key} ${e.label} ${t.name} ${t.sampleSource?.id || ""}`.toLowerCase());
+    : DRUM_RE.test(`${e.key} ${e.label} ${t.name} ${t.sampleSource?.id || ""} ${up && e.key === "sampler" ? up.name : ""}`.toLowerCase());
   // The ladder's format marker: without it the loader reads the four sliders
   // as the old engine's (see migrateLadderFilter, sessionFormat.js).
   if (e.key === "dm:ladder") t.params.ldrv = 2;
@@ -462,6 +472,16 @@ export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, t
   if (e.key === "dm:oracle") t.params.orcv = 2;
   song.tracks.push(t);
   return { index: song.tracks.length - 1, engine: e.key, name: t.name };
+}
+function uploadOf(u) {
+  if (!u || typeof u !== "object") fail("`upload` is {name, audio, mime}");
+  if (typeof u.audio !== "string" || u.audio.length < 16 || !/^[A-Za-z0-9+/]+=*$/.test(u.audio.slice(0, 64))) fail("`upload.audio` is the file as base64");
+  return {
+    name: String(u.name || "sample").slice(0, 80),
+    audio: u.audio,
+    mime: typeof u.mime === "string" && /^audio\//.test(u.mime) ? u.mime : "audio/mpeg",
+    source: u.source && typeof u.source === "object" ? JSON.parse(JSON.stringify(u.source)) : null,
+  };
 }
 function findByIdOrLabel(list, spec, what) {
   const s = String(spec).trim().toLowerCase();
@@ -1252,7 +1272,8 @@ export function summarizeTrack(song, index) {
   const out = {
     index: i, name: t.name, engine: t.engineKey, length: t.length,
     drumKit: !!t.isDrumKit,
-    ...(t.sampleSource ? { sample: t.sampleSource.id } : {}), ...(t.granularSample ? { texture: t.granularSample.id } : {}),
+    ...(t.sampleSource?.id ? { sample: t.sampleSource.id } : {}), ...(t.granularSample ? { texture: t.granularSample.id } : {}),
+    ...(t.uploadAudio ? { sound: t.sampleSource?.soundId ? `freesound ${t.sampleSource.soundId}: ${t.sampleSource.name}` : (t.uploadFileName || t.sampleSource?.name || "an uploaded sample") } : {}),
     vol: t.params.vol ?? 0.8, sliders, ...(Object.keys(params).length ? { panel: params } : {}),
     ...(Object.keys(t.filter).length ? { filter: t.filter } : {}),
     ...(Object.keys(t.eq).length ? { eq: t.eq } : {}),

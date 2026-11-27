@@ -37,7 +37,7 @@ import { TOOLS, FORMAT_NOTES as BASE_FORMAT_NOTES, guideText } from "./tools.mjs
 const SEQBABY_URL = (process.env.SEQBABY_URL || "https://www.playseqbaby.com").replace(/\/$/, "");
 
 // ---- the one song ------------------------------------------------------------
-const ctx = { song: sb.newSong(), songName: "untitled" };
+const ctx = { song: sb.newSong(), songName: "untitled", soundsKey: process.env.FREESOUND_API_KEY || null };
 
 const text = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 1) }] });
 const oops = (e) => ({ isError: true, content: [{ type: "text", text: e instanceof sb.SongError ? e.message : `error: ${e?.message || e}` }] });
@@ -84,6 +84,7 @@ const FORMAT_NOTES = `${BASE_FORMAT_NOTES}
 const SPECIAL = new Set(["export_song", "load_song"]);
 for (const t of TOOLS) {
   if (SPECIAL.has(t.name)) continue;
+  if (t.needs === "sounds" && !ctx.soundsKey) continue;   // no freesound key, no sound tools
   server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: t.inputSchema }, run((args, extra) => t.handler(ctx, args, extra)));
 }
 

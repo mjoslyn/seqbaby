@@ -18,6 +18,9 @@ interface CloudflareEnv {
    *  without an account and offers sonnet and opus. Rotate it to cut off every
    *  link and cookie handed out under the old one. */
   COMPOSE_UNLOCK_CODE?: string;
+  /** A freesound.org API key (lib/freesound.js): sound search in the sampler's
+   *  picker and in a compose turn. Without it neither is offered. */
+  FREESOUND_API_KEY?: string;
   GITHUB_ISSUES_TOKEN?: string;
   GITHUB_ISSUES_REPO?: string;
   TURNSTILE_SECRET_KEY?: string;

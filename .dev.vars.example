@@ -17,6 +17,9 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 # compose on a key of their own.
 # ANTHROPIC_API_KEY=sk-ant-xxx
 # ANTHROPIC_MODEL=claude-sonnet-5-5
+# Sound search (the sampler's picker, and compose): a freesound.org API key,
+# from https://freesound.org/apiv2/apply
+# FREESOUND_API_KEY=xxx
 # Accounts (by email) that get a model menu in the compose panel:
 # COMPOSE_MODEL_PICKERS=you@example.com, friend@example.com
 # A code shared as /studio?unlock=<code>: compose without an account, and

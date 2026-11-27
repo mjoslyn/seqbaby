@@ -251,34 +251,7 @@ export async function pickAudioFileForTrack(t, targetEngine = "sampler") {
       if (!file) { if (!resolved) resolve(false); resolved = true; return; }
       try {
         setStatus(`loading "${file.name}"...`);
-        const arrayBuf = await file.arrayBuffer();
-        await ensureAudio();
-        // decodeAudioData mutates the buffer, so keep a copy for persistence
-        const persistBytes = arrayBufferToBase64(arrayBuf.slice(0));
-        const audioBuf = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(arrayBuf));
-        t.uploadBuffer = audioBuf;
-        t.uploadAudio = persistBytes;
-        t.uploadAudioMime = file.type || "audio/wav";
-        t.uploadFileName = file.name;
-        t.soundPromptText = file.name;
-        if (targetEngine === "sampler") t.sampleSource = { kind: "upload", name: file.name };
-        // Push the decoded buffer to the matching live voice if we're already on
-        // the target engine; otherwise switch to it (which rebuilds the voice and
-        // picks up the freshly-set uploadBuffer). Both the sampler and the granular
-        // engine read from track.uploadBuffer.
-        const targetType = targetEngine === "dm:granular" ? "granular" : "sampler";
-        if (t.engineKey === targetEngine && t.voice?.type === targetType) {
-          t.voice.setBuffer(audioBuf);
-        } else {
-          setEngineKey(t, targetEngine);
-          if (t.el) t.el.querySelector(".sq-track__engine").value = targetEngine;
-        }
-        // Root note tracks the sample's natural-playback octave: C2 for drum-kit
-        // samples, C4 otherwise. New notes on an empty grid anchor to this root
-        // (via lastUsedNote), so clear the stale last-edited pitch on load.
-        if (targetEngine === "sampler") { redetectDrumKit(t); t.sliceBase = t.isDrumKit ? 36 : 60; t.lastEditedNote = null; }
-        applySampleSpeed(t);
-        setStatus(`"${t.name}" ← ${file.name} (${Math.round(audioBuf.duration * 1000)}ms)`);
+        await putAudioOnTrack(t, await file.arrayBuffer(), { name: file.name, mime: file.type || "audio/wav", targetEngine });
         resolve(true);
       } catch (err) {
         console.error(err);
@@ -293,6 +266,108 @@ export async function pickAudioFileForTrack(t, targetEngine = "sampler") {
     inp.click();
   });
 }
+
+// Audio of the track's own (a picked file, a sound from the search), decoded
+// onto it and kept as base64 so a save carries it. `source` is what a sampler
+// remembers about where it came from, besides its name.
+async function putAudioOnTrack(t, arrayBuf, { name, mime, targetEngine = "sampler", source = null }) {
+  await ensureAudio();
+  // decodeAudioData mutates the buffer, so keep a copy for persistence
+  const persistBytes = arrayBufferToBase64(arrayBuf.slice(0));
+  const audioBuf = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(arrayBuf));
+  t.uploadBuffer = audioBuf;
+  t.uploadAudio = persistBytes;
+  t.uploadAudioMime = mime;
+  t.uploadFileName = name;
+  t.soundPromptText = name;
+  if (targetEngine === "sampler") t.sampleSource = { ...(source || {}), kind: "upload", name };
+  else t.granularSample = null;   // its own audio now, not a library texture
+  // Push the decoded buffer to the matching live voice if we're already on
+  // the target engine; otherwise switch to it (which rebuilds the voice and
+  // picks up the freshly-set uploadBuffer). Both the sampler and the granular
+  // engine read from track.uploadBuffer.
+  const targetType = targetEngine === "dm:granular" ? "granular" : "sampler";
+  if (t.engineKey === targetEngine && t.voice?.type === targetType) {
+    t.voice.setBuffer(audioBuf);
+  } else {
+    setEngineKey(t, targetEngine);
+    if (t.el) t.el.querySelector(".sq-track__engine").value = targetEngine;
+  }
+  // Root note tracks the sample's natural-playback octave: C2 for drum-kit
+  // samples, C4 otherwise. New notes on an empty grid anchor to this root
+  // (via lastUsedNote), so clear the stale last-edited pitch on load.
+  if (targetEngine === "sampler") { redetectDrumKit(t); t.sliceBase = t.isDrumKit ? 36 : 60; t.lastEditedNote = null; }
+  applySampleSpeed(t);
+  setStatus(`"${t.name}" ← ${name} (${Math.round(audioBuf.duration * 1000)}ms)`);
+}
+
+// The sound search in a source picker: CC0 sounds from freesound.org, through
+// /api/sounds (the site's key; lib/freesound.js). ▶ auditions a result from
+// freesound's own preview, a click on its name loads it onto the track, where
+// it is the track's own audio like a picked file. `maxSeconds` is how long a
+// sound this engine takes. Returns a cleanup for the modal's close.
+function attachSoundSearch(modal, t, targetEngine, maxSeconds, finish) {
+  const box = modal.querySelector(".sq-sampler__find");
+  const input = box.querySelector("input");
+  const out = box.querySelector(".sq-sampler__find-list");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let player = null, playing = null, seq = 0, sounds = [];
+  const stop = () => { if (player) { player.pause(); player = null; } if (playing) { playing.textContent = "▶"; playing = null; } };
+  const say = (text, bad) => { out.innerHTML = `<div class="sq-sampler__find-note${bad ? " is-error" : ""}">${esc(text)}</div>`; };
+  const search = async () => {
+    const q = input.value.trim();
+    if (q.length < 2) return;
+    const mine = ++seq;
+    stop(); say("searching…");
+    try {
+      const res = await fetch(`/api/sounds?q=${encodeURIComponent(q)}&max=${maxSeconds}`);
+      const body = await res.json().catch(() => ({}));
+      if (mine !== seq) return;
+      if (!res.ok) return say(res.status === 503 ? "sound search is not set up on this site" : body.error || "the search failed", true);
+      sounds = Array.isArray(body.sounds) ? body.sounds : [];
+      if (!sounds.length) return say(`nothing free to use under ${maxSeconds}s matches "${q}"`);
+      out.innerHTML = sounds.map((s, i) => `<div class="sq-sampler__find-row">
+          <button type="button" class="sq-btn--ghost" data-play="${i}" aria-label="hear ${esc(s.name)}" title="hear it">▶</button>
+          <button type="button" class="sq-btn--ghost sq-sampler__find-pick" data-pick="${i}" title="load it onto this track. ${esc(s.tags.join(" "))}"><b>${esc(s.name)}</b><span>${s.seconds}s${s.by ? ` · ${esc(s.by)}` : ""}</span></button>
+        </div>`).join("");
+    } catch { if (mine === seq) say("the search failed", true); }
+  };
+  box.querySelector(".sq-sampler__find-go").addEventListener("click", search);
+  input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); search(); } });
+  out.addEventListener("click", async (e) => {
+    const play = e.target.closest("[data-play]"), pick = e.target.closest("[data-pick]");
+    if (play) {
+      const was = playing; stop();
+      if (was === play) return;
+      player = new Audio(sounds[+play.dataset.play].preview);
+      playing = play; play.textContent = "■";
+      player.addEventListener("ended", stop);
+      player.play().catch(stop);
+    } else if (pick) {
+      const s = sounds[+pick.dataset.pick];
+      stop(); setStatus(`loading "${s.name}"…`);
+      for (const b of out.querySelectorAll("button")) b.disabled = true;
+      try {
+        const res = await fetch(`/api/sounds/${s.id}`);
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "could not load that sound");
+        await putAudioOnTrack(t, await res.arrayBuffer(), { name: s.name, mime: "audio/mpeg", targetEngine,
+          source: { from: "freesound", soundId: s.id, by: s.by, license: s.license, url: s.url } });
+        finish(true);
+      } catch (err) {
+        console.warn("sound load", err);
+        setStatus(err?.message || `failed to load "${s.name}"`, true);
+        for (const b of out.querySelectorAll("button")) b.disabled = false;
+      }
+    }
+  });
+  return stop;
+}
+const SOUND_FIND = (what) => `
+      <div class="sq-sampler__src-sep">or search freesound.org (free to use, CC0)</div>
+      <div class="sq-sampler__find">
+        <div class="sq-sampler__find-bar"><input type="search" placeholder="${what}" aria-label="search freesound" maxlength="100" /><button type="button" class="sq-sampler__find-go sq-btn">search</button></div>
+        <div class="sq-sampler__find-list"></div>
+      </div>`;
 
 // Put a bundled sample on a track, switching it to the sampler if it is not
 // one already. Shared by the sampler's source picker and the instrument
@@ -352,7 +427,8 @@ export async function loadGranularTexture(t, id, label) {
 export function openSamplerSourceModal(t) {
   return new Promise(resolve => {
     let done = false;
-    const finish = (ok) => { if (done) return; done = true; overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
+    let stopFind = () => {};
+    const finish = (ok) => { if (done) return; done = true; stopFind(); overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
     const overlay = document.createElement("div");
     overlay.className = "sq-modal-overlay";
     const modal = document.createElement("div");
@@ -363,12 +439,13 @@ export function openSamplerSourceModal(t) {
       <div class="sq-modal__title">sampler source</div>
       <button type="button" class="sq-sampler__src-file sq-btn">load file…</button>
       <div class="sq-sampler__src-sep">or a bundled sample</div>
-      <div class="sq-sampler__src-list"></div>
+      <div class="sq-sampler__src-list"></div>${SOUND_FIND("a sound: snare, clap, rain, door…")}
       <div class="sq-modal__credit">${ACOUSTIC_KITS.map(k =>
         `<a href="${k.url}" target="_blank" rel="noopener">${k.title}</a> by ${k.author} (<a href="${k.licenseUrl}" target="_blank" rel="noopener">${k.license}</a>)`).join(" · ")}</div>
       <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    stopFind = attachSoundSearch(modal, t, "sampler", 10, finish);
 
     const chooseBundled = async (id, label) => {
       await loadBundledSample(t, id, label);
@@ -407,7 +484,8 @@ export function openSamplerSourceModal(t) {
 export function openGranularSourceModal(t) {
   return new Promise(resolve => {
     let done = false;
-    const finish = (ok) => { if (done) return; done = true; overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
+    let stopFind = () => {};
+    const finish = (ok) => { if (done) return; done = true; stopFind(); overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
     const overlay = document.createElement("div");
     overlay.className = "sq-modal-overlay";
     const modal = document.createElement("div");
@@ -419,11 +497,12 @@ export function openGranularSourceModal(t) {
       <div class="sq-modal__title">granular source</div>
       <button type="button" class="sq-sampler__src-file sq-btn">load file…</button>
       <div class="sq-sampler__src-sep">or a texture to granulate</div>
-      <div class="sq-sampler__src-list"></div>
+      <div class="sq-sampler__src-list"></div>${SOUND_FIND("a texture: rain, choir, strings, crowd…")}
       <div class="sq-modal__credit">textures from <a href="${c.url}" target="_blank" rel="noopener">${c.title}</a> by ${c.author} (${c.license})</div>
       <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    stopFind = attachSoundSearch(modal, t, "dm:granular", 30, finish);
 
     const chooseTexture = async (id, label) => {
       await loadGranularTexture(t, id, label);

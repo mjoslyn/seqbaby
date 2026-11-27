@@ -178,6 +178,15 @@ after a fill, toms only in fills. In code, `.bank("salamander")` (or
 `virtuosity`, `drskit`) maps `bd sd rim hh oh ht lt rd cr` onto them.
 `describe_engine` `sampler` lists every bundled sample.
 
+Where `search_sounds` is offered, a sampler can also play a recording from
+freesound.org (CC0 only): search for the plain thing ("rimshot dry", "vinyl
+crackle", "rain on window"), pick by name, tags and length since you cannot
+hear it, and `add_sound_track` it by id. Use it for the sound nothing here
+makes (a found sound, a texture, one particular hit), a few a song at most;
+build the kit itself from the bundled samples and the drum engines, whose
+levels and pitches are known. A one-shot is under 2s. A sound's own pitch is
+C4 (C2 on a drum kit), so write melodic notes around that.
+
 Bass: `dm:silverbox` for acid and anything squelchy: harm is cutoff, timb
 resonance, morph the envelope depth, decay the envelope; an ACCENT comes from
 velocity above 0.6 (`X`), a SLIDE from a tie into the next note (`x_x`); set

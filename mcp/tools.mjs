@@ -18,6 +18,19 @@ import * as sb from "../public/js/songBuilder.js";
 import * as strudel from "../public/js/strudel.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, FILTER_TYPES } from "../public/js/soundDefaults.js";
 import { GENRE_FAMILIES, genreById, genrePrompt, searchGenres } from "../app/songs/genres.js";
+import { SOUND_MAX_SECONDS, SoundError, bytesToBase64, fetchSound, searchSounds, soundSource } from "../lib/freesound.js";
+
+/** Freesound in a turn: how many searches and how many sounds one may take.
+ *  A sound is carried in the session as base64, and a search spends the
+ *  site's daily quota, so both are counted on the ctx. */
+export const SOUND_SEARCHES_PER_TURN = 8;
+export const SOUNDS_PER_TURN = 6;
+/** A tool flagged `needs: "sounds"` is only offered where there is a key. */
+const soundsKey = (ctx) => {
+  if (!ctx.soundsKey) throw new sb.SongError("sound search is not set up here: use the bundled samples (describe_engine sampler lists them)");
+  return ctx.soundsKey;
+};
+const asSongError = (e) => { throw e instanceof SoundError ? new sb.SongError(e.message) : e; };
 
 /** The compose skill's path within the repo, for whoever can locate the repo. */
 export const GUIDE_RELATIVE = path.join(".claude", "skills", "compose", "SKILL.md");
@@ -208,6 +221,37 @@ export const TOOLS = [
     inputSchema: { engine: z.string(), name: z.string().optional(), length: z.number().int().min(1).max(64).optional().describe("steps per pattern (default 16)"),
       sample: z.string().optional(), texture: z.string().optional(), drumKit: z.boolean().optional().describe("blank steps play C2 and the sampler pitches from C2; guessed from the engine and name when omitted") },
     handler: (ctx, a) => sb.addTrack(ctx.song, a),
+  },
+  {
+    name: "search_sounds", title: "Search sounds", needs: "sounds",
+    description: `Search freesound.org for a recorded sound to put on a sampler or granular track: a particular drum hit, a clap in a room, a vinyl crackle, rain, a spoken word, a metal clang. CC0 sounds only. You cannot hear them, so choose by name, tags and length, and search for the plain thing ("808 kick", "rimshot dry", "rain on window") rather than a mood. Reach for it when the bundled samples and the synth engines do not have the sound; a kit is still best built from the bundled ones. At most ${SOUND_SEARCHES_PER_TURN} searches a turn.`,
+    inputSchema: { query: z.string().min(2).max(100), maxSeconds: z.number().min(0.2).max(SOUND_MAX_SECONDS.granular).optional().describe(`longest sound wanted, in seconds (default 4; a one-shot is under 2, a loop or a texture longer; up to ${SOUND_MAX_SECONDS.granular})`) },
+    handler: async (ctx, { query, maxSeconds }) => {
+      const key = soundsKey(ctx);
+      ctx.soundSearches = (ctx.soundSearches || 0) + 1;
+      if (ctx.soundSearches > SOUND_SEARCHES_PER_TURN) throw new sb.SongError(`that is ${SOUND_SEARCHES_PER_TURN} searches this turn already: pick from what you have, or use a bundled sample`);
+      const out = await searchSounds({ key, query, maxSeconds: maxSeconds ?? 4, limit: 10, fetch: ctx.fetch }).catch(asSongError);
+      if (!out.sounds.length) return `nothing CC0 under ${maxSeconds ?? 4}s matches ${JSON.stringify(query)}: try plainer words or a longer maxSeconds`;
+      return out.sounds.map((s) => ({ id: s.id, name: s.name, seconds: s.seconds, tags: s.tags.join(" ") }));
+    },
+  },
+  {
+    name: "add_sound_track", title: "Add sound track", needs: "sounds",
+    description: `Add a track that plays a freesound.org sound found with search_sounds, by its id. \`engine\` is "sampler" (the default: the sound played per step, pitched by the note, C4 its own pitch, or C2 on a drum kit) or "granular" (the sound as a texture to spray grains from; up to ${SOUND_MAX_SECONDS.granular}s). A sampler sound may be up to ${SOUND_MAX_SECONDS.sampler}s. Returns the new track's index, as add_track does. At most ${SOUNDS_PER_TURN} a turn.`,
+    inputSchema: { sound: z.number().int().positive().describe("the sound's freesound id, from search_sounds"), name: z.string().optional(), engine: z.enum(["sampler", "granular"]).optional(),
+      length: z.number().int().min(1).max(64).optional().describe("steps per pattern (default 16)"), drumKit: z.boolean().optional().describe("blank steps play C2 and the sample's own pitch is C2; guessed from the names when omitted") },
+    handler: async (ctx, { sound, name, engine, length, drumKit }) => {
+      const key = soundsKey(ctx);
+      if ((ctx.soundsTaken || 0) >= SOUNDS_PER_TURN) throw new sb.SongError(`that is ${SOUNDS_PER_TURN} sounds this turn already: use the bundled samples or a synth engine for the rest`);
+      const kind = engine === "granular" ? "granular" : "sampler";
+      const s = await fetchSound({ key, id: sound, maxSeconds: SOUND_MAX_SECONDS[kind], fetch: ctx.fetch }).catch(asSongError);
+      const made = sb.addTrack(ctx.song, {
+        engine: kind === "granular" ? "dm:granular" : "sampler", name: name || s.name.replace(/\.[a-z0-9]{2,4}$/i, "").slice(0, 40), length, drumKit,
+        upload: { name: s.name, audio: bytesToBase64(s.bytes), mime: s.mime, source: soundSource(s) },
+      });
+      ctx.soundsTaken = (ctx.soundsTaken || 0) + 1;
+      return { ...made, sound: s.name, seconds: s.seconds };
+    },
   },
   {
     name: "remove_track", title: "Remove track", description: "Remove a track; later indices move down, sends to it go back to master.",
@@ -402,9 +446,11 @@ export const TOOLS = [
   },
   {
     name: "export_song", title: "Export song",
-    description: "The song as the JSON the studio loads.",
+    description: "The song as the JSON the studio loads. A track's own audio (an uploaded or freesound sample) is left out of what is returned here.",
     inputSchema: {},
-    handler: (ctx) => JSON.parse(sb.toJSON(ctx.song)),
+    // The audio is megabytes of base64: nothing a reader of this result acts
+    // on. (The stdio server's own export_song writes the whole file.)
+    handler: (ctx) => { const o = JSON.parse(sb.toJSON(ctx.song)); for (const t of o.tracks || []) if (t.uploadAudio) t.uploadAudio = "(audio left out)"; return o; },
   },
   {
     name: "load_song", title: "Load song",

@@ -210,6 +210,7 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
         history: job.history,
         session: job.session,
         unnamed: !!job.unnamed,
+        soundsKey: this.env.FREESOUND_API_KEY || null,
         ...(job.canHear ? { listen: (session: unknown) => this.listen(id, session) } : {}),
         // Persisted as it happens: the point of a job that runs for minutes is
         // being able to watch it.

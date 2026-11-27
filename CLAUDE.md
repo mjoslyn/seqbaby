@@ -80,6 +80,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeHear.ts         the panel's ears: plays a turn's song silently in the hidden engine, posts the meters
 │   ├── api/auth/[...all]/     Better Auth's endpoints (the links in its emails land here)
 │   ├── api/bay/               the studio's patch bay (bodies too big for a server action)
+│   ├── api/sounds/            the sampler's sound search (freesound, on the deploy's key) and a sound's audio
 │   ├── api/me/route.ts        who is signed in, for islands on cached pages
 │   ├── api/unlock/route.ts    an unlock link (?unlock=<code>) sets the compose unlock cookie
 │   ├── api/admin/import/      the one-off move from Supabase (off unless MIGRATION_TOKEN is set)
@@ -102,6 +103,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   ├── data/composeTurns.js   how each turn went and whether it was kept (compose_turns)
+│   ├── freesound.js           freesound.org: CC0 sound search and fetch, for the sampler's picker and compose
 │   ├── songTags.js            a song's tags as stored: one spelling per tag, distinct, at most eight
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 share put/get for the legacy static server (in memory)
@@ -5439,7 +5441,8 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
 - **The MCP server holds one song** and keeps the tool list short (44 tools on stdio, 42 of them shared with the compose panel, which lacks
-  `share_song` and `audition_song`:
+  `share_song` and `audition_song`; two more, `search_sounds` and
+  `add_sound_track`, where there is a freesound key:
   song / engines / genres / tracks / steps / sound / modulation / generators / code /
   out). `list_genres` / `genre_brief` are the groove picker for an agent:
   the same table and the same dice (`genrePrompt`, a random seed unless one
@@ -6521,6 +6524,42 @@ record of which file each one is. The picker groups by kit
 Strudel reaches them with `.bank("salamander" | "virtuosity" | "drskit")`;
 `describe_engine sampler` lists every bundled sample, because the compose
 panel has the MCP tools but not its resources.
+
+**Sounds from freesound.org** (`lib/freesound.js`, the `FREESOUND_API_KEY`
+secret; without it nothing below is offered). CC0 only: the search asks for
+the licence and every result's own licence is checked again (`soundFromApi`,
+`isCc0`), so a song made here never carries a sound that needs credit or has
+terms. The audio is freesound's mp3 PREVIEW (a token reads those; an
+original file needs a person's OAuth), capped at 10s for a sampler and 30s
+for a granular track (`SOUND_MAX_SECONDS`) and 900KB. A loaded sound is the
+track's OWN audio, exactly as a picked file is (`uploadAudio` base64,
+`sampleSource {kind: "upload", name, from: "freesound", soundId, by, license,
+url}`), so save, the per-song sample store in R2, undo, a jam and a patch
+carry it with no code of their own. Two ways in:
+
+- **The source pickers** (`attachSoundSearch`, main.js, in the sampler's and
+  the granular engine's source modal): a search box under the bundled list,
+  each result with ▶ (an `<audio>` on freesound's own preview URL) and its
+  name, which loads it through `putAudioOnTrack`, the routine a picked file
+  uses. It asks `GET /api/sounds?q=&max=` (search, the browser's cache only,
+  since the query is in the query string) and `GET /api/sounds/<id>` (the
+  bytes, same-origin so they can be decoded and kept; the licence checked
+  again). No account needed; 503 without a key, which the picker says.
+- **Compose** (`search_sounds`, `add_sound_track` in mcp/tools.mjs, flagged
+  `needs: "sounds"`): offered only where there is a key (`anthropicTools({sounds})`,
+  the job passes `soundsKey`; the stdio server reads the env var), at most
+  `SOUND_SEARCHES_PER_TURN` (8) searches and `SOUNDS_PER_TURN` (6) sounds a
+  turn, counted on the ctx. The model cannot hear a result, so it picks by
+  name, tags and length; the guide says to keep the kit on the bundled
+  samples and use this for the sound nothing here makes. They are the only
+  ASYNC handlers: `runTool` returns a promise for those and a plain result
+  for the rest, and the turn awaits it. The builder's `addTrack` takes
+  `upload: {name, audio, mime, source}` and stays pure; nothing the model
+  reads back carries the audio (`summarizeTrack().sound` names it, and the
+  shared `export_song` leaves it out).
+- Freesound's default quota is about 2000 requests a day for the whole
+  site. `test/freesound.test.js` runs all of it against a fetch of its own;
+  nothing here has been run against the live API.
 
 Adding a new engine: catalog entry + voice class dispatch in
 `buildVoiceForEngine` (or a `buildDrumSynthGraph` case + builder fn for
