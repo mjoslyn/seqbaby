@@ -80,7 +80,7 @@ function openAudioGate() {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="sq-audio__gate-title">tap to enable audio</div>
-    <div class="sq-audio__gate-note"><strong>designed for larger screens.</strong> some features are desktop only, and it is easier to use.</div>
+    <div class="sq-audio__gate-note"><strong>designed for larger screens.</strong> the clip launcher, the arrangement, the mix decks and live code are desktop only.</div>
     <div class="sq-audio__gate-hint" aria-live="polite"></div>
     <button class="sq-audio__gate-btn" type="button">enable audio</button>
     <div class="sq-audio__gate-status"></div>
