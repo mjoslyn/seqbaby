@@ -5517,3 +5517,5 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
 .sq-perf__menu-modal .sq-perf { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 10px; }
 .sq-perf__menu-modal .sq-mute-scenes { flex: 1 1 100%; }
 .sq-perf__menu-modal .sq-mute-scenes button { min-height: 44px; flex: 1 1 0; }
+/* the mix view has no `+ add fx bus` under it: its footer's `master fx` is the bus there */
+body.view-mix #add-bus { display: none; }
