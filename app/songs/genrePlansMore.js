@@ -18,6 +18,36 @@ const S16 = "xoxoxoxoxoxoxoxo";
 /** @type {Record<string, any>} */
 export const MORE_PLANS = {
   // ---- house, techno, trance ---------------------------------------------------------
+  "future-garage": {
+    swing: [0.2, 0.32], kits: ["909", "breaks", "r8"],
+    drums: [
+      { kick: "x.........x.....", rim: BACK, hat: "x.xox.xox.xox.xo" },
+      { kick: "x......x..x.....", snare: "....X.......X..o", hat: "..x.o.x...x.o.xo", rim: ".o.....o.o......" },
+      { kick: "x.....x......x..", rim: "....X.....o.X...", hat: "x.ox..oxx.ox..ox", shaker: "..o...o...o...o." },
+    ],
+    core: { sub: ["dm:sub/pure sine", "dm:sub/reese", "dm:sub/dub"], pad: ["dm:oracle/warm pad", "dm:oracle/strings", "dm:drone/subterranean"] },
+    optional: { vox: ["dm:vox/soul lead", "dm:vox/whisper", "dm:vox/angel ooh"], bell: ["dm:hexop/bell", "dm:hexop/marimba"], keys: ["dm:tines", "dm:hexop/e.piano"], shaker: ["dm:halo/shaker"] },
+    extras: [1, 3],
+    bass: ["one long sub note after the kick, resting on 2 and 4 `..x_____..x_....`", "two notes a bar with a slide between them `x_______..x_x_..`", "a sub that enters only in the second half of each bar `........x_..x_x_`"],
+    harmony: ["minor: i min9 - bVI maj7, four bars each, held", "minor: i min7 - bVII - bVI maj7 - bVII, one a bar", "dorian: one min9 chord throughout, its filter moving", "minor: i min9 - iv min9, two bars each"],
+    moves: ["[vox] a pitched vox chop on the offbeat, thrown into a long delay", "vinyl crackle on the drums and the pad's filter closed to about half", "ghost rims at velocity o between the backbeats", "the drums out for two bars, the pad and the sub alone", "a nudge (offset) late on the hats on top of the swing", "[bell] a sparse bell phrase, three notes, answered by silence"],
+    avoid: ["a four on the floor kick", "a kick on beat 2 or 4", "straight unswung hats", "a bright, busy lead"],
+  },
+  "uk-techno": {
+    swing: [0.08, 0.2], kits: ["breaks", "siege-909", "909"],
+    drums: [
+      { kick: "x.....x...x.....", clap: BACK, hat: "x.xox.xox.xox.xo", "open hat": OFF },
+      { kick: "x..x......x..x..", snare: "....X..o.o..X...", hat: "x.oxx.oxx.oxx.ox", rim: "..o....o......o." },
+      { kick: "x...x.....x...x.", clap: BACK, hat: "..xo..xo..xo..xo", ride: E8, tom: ".......x.....x.." },
+    ],
+    core: { bass: ["dm:sub/reese", "dm:sub/pure sine", "dm:sub/growl", "dm:ladder/pedal bass"], pad: ["dm:oracle/dirty stab", "dm:contagion", "dm:oracle/warm pad"] },
+    optional: { vox: ["dm:vox/soul lead", "dm:vox/la la"], stab: ["dm:hexop/bell", "dm:hexop/organ"], acid: ["dm:silverbox"], perc: ["dm:halo/trash", "dm:lancet/tin head"] },
+    extras: [1, 3],
+    bass: ["short sub calls in the gaps after the kick `..x_..x_....x_..`", "one long reese note a bar with a cutoff lane, cut off before the next kick `.x______....x_..`", "a rolling two-note figure a minor third apart `..xx..x...xx..x.`"],
+    harmony: ["minor: i - bVI, four bars each, as rave stabs", "minor: i min7 - bVII - bVI maj7 - bVII, the pad held", "minor/phrygian: one root, the pad a single minor chord with its filter moving", "dorian: i min7 - IV, two bars each"],
+    moves: ["a two-bar drum pattern (length 32) whose second bar ends in a fill", "[vox] a pitched vox chop repeated, its delay feedback rising into the drop", "the pad's cutoff opening over eight bars on a lane", "the kick out for a bar before the drop, the break carrying on", "the bass sidechained from the kick", "[acid] a silverbox line that enters only in the second half"],
+    avoid: ["a plain four on the floor in every section", "straight unswung hats", "a thin bass: the sub is the weight"],
+  },
   "garage-house": {
     swing: [0.12, 0.22], kits: ["909", "siege-909", "live"],
     drums: [
