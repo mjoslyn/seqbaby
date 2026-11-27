@@ -3390,8 +3390,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   matrix and lanes with no code of its own; signal.js reads "master" as its
   input (`mixOutNode`, used by `outputTargetFor` and the landing gain), and
   `sendOf` follows it, so solo and the noise beds see the chain. Drawn as a
-  `master` block at the desk's right (three bands, a filter, a fader, mute,
-  cue, × to take it off) with its own card as the detail; its card is hidden
+  sheet at the desk's right holding the bus's OWN track card (`seatMaster`,
+  mixView.js: the `.sq-track` moved into `.sq-mix__master-card` after every
+  paint and put back when the sheet hides or the view closes, as the detail's
+  is), so it is a whole fx bus track there: the fx picker, filter, eq, comp,
+  mod and aut as on a bus in the groove view, plus `remove`. It is never the
+  detail's selection (`makeTrackDetail`'s `ok`); its card is hidden
   in the track list (`is-master-bus`) and it is never an `out` or send
   target. **It is the desk's, not the song's**: `inSong` is false, so it is
   not saved, undone, shared in a jam or in a mute scene; `applySet` leaves
@@ -3438,11 +3442,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   resized by the same drag (viewSplit.js's `topPx` reads the fraction there,
   since the top pane's height is no longer the handle's place). The
   footer drawer's `instrument` toggles it, selecting a strip opens it, its × closes
-  it. The master fx bus's block is a sheet at the right
-  (`.sq-mix__master`, absolute in the section, so it stays put while the
-  desk scrolls): the footer's `master fx` makes the bus the first time and
+  it. The master fx bus's card is a sheet at the right
+  (`.sq-mix__master`, a sibling of the desk made in `installMixView`, since
+  the desk is repainted by innerHTML; absolute in the section, so it stays
+  put while the desk scrolls): the footer's `master fx` makes the bus the first time and
   shows / hides the sheet after that (the bus stays in the path hidden; the
-  strip's × takes it off).
+  sheet's `remove` takes it off).
   The toggles live in a FOOTER DRAWER (`.sq-mix__foot`, made once in
   `installMixView`, repainted by `render`): a bar pinned under the desk and
   over both sheets, with `instrument`, `master fx` and `+ load a deck…`.

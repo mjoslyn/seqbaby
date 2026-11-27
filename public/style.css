@@ -4823,9 +4823,13 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
   border-top: 1px solid var(--border); font-size: 12px; }
 .sq-mix__foot button { padding: 4px 12px; font-size: 12px; }
 .sq-mix__sheet-x { position: sticky; top: 0; float: right; z-index: 2; padding: 2px 9px; font-size: 14px; line-height: 1.2; }
-.sq-mix__master { position: absolute; right: 16px; top: 52px; z-index: 45; display: grid; gap: 6px; justify-items: center; padding: 8px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: -8px 10px 24px rgba(0, 0, 0, 0.45); }
-.sq-mix__master > b { font-size: 11px; letter-spacing: 0.08em; color: var(--fg-dim); }
+/* the master fx bus's sheet: the bus's own track card, moved in (mixView.js seatMaster) */
+.sq-mix__master { position: absolute; right: 16px; top: 52px; bottom: 60px; width: min(640px, 55%); z-index: 45; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: -8px 10px 24px rgba(0, 0, 0, 0.45); }
+.sq-mix__master[hidden] { display: none !important; }
+.sq-mix__master-head { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--fg-dim); }
+.sq-mix__master-head > b { font-size: 12px; letter-spacing: 0.08em; color: var(--fg); }
+.sq-mix__master-head button { padding: 2px 9px; font-size: 12px; }
 .sq-mix__strip.is-master { border-top-color: var(--fg); background: color-mix(in oklab, var(--fg) 6%, var(--bg)); }
 .sq-mix__tone.is-feed { min-height: 0; }
 .sq-mix__strip.is-feedhost { border: 0; background: none; padding: 0; flex: 0 0 auto; min-height: 0; }

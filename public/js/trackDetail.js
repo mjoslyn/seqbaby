@@ -53,7 +53,8 @@ export function restoreTrackCard(t) {
 export function makeTrackDetail(container, onChange, { buses = false, clips = false } = {}) {
   // `buses`: the mix view's detail also shows a bus's card (a deck's bus is
   // where its eq, its rack and its lanes are).
-  const ok = (t) => !!t && (buses || t.engineKey !== "bus");
+  // (never the master fx bus: its card lives in the mix view's own sheet)
+  const ok = (t) => !!t && !t._masterBus && (buses || t.engineKey !== "bus");
   const el = document.createElement("div");
   el.className = "sq-track-detail";
   el.innerHTML = `<div class="sq-track-detail__title"></div>${clips ? `<div class="sq-track-detail__clips" role="group" aria-label="this track's clips"></div>` : ""}`;

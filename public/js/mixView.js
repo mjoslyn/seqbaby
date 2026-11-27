@@ -43,7 +43,7 @@ import { loadSetsMap } from "./session.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { setPatternMode } from "./patternBar.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
-import { makeTrackDetail, trackHue } from "./trackDetail.js";
+import { makeTrackDetail, restoreTrackCard, trackHue } from "./trackDetail.js";
 import { makeViewSplit } from "./viewSplit.js";
 import { onViewChange } from "./views.js";
 
@@ -52,6 +52,7 @@ let desk = null;      // the rebuilt half
 let foot = null;      // the footer drawer: the sheets' toggles, and load a deck
 let detail = null;    // the selected strip's own track card
 let raf = 0;
+let masterSheet = null; // the master fx bus's sheet: its own card is moved in
 let holding = false;  // a control in the desk is held: no rebuild under the pointer
 let stale = false;    // a repaint was asked for meanwhile
 let fadeBars = 4;
@@ -208,6 +209,15 @@ export function installMixView() {
   foot.setAttribute("aria-label", "mix sheets and decks");
   root.appendChild(foot);
   detail = makeTrackDetail(panes.bottom, scheduleMixPaint, { buses: true, clips: true });
+  // The master fx bus's sheet: its real card (trackDetail.js's move), so it
+  // is a whole fx bus track here, with the fx picker, filter, eq, comp, mod
+  // and lanes the groove view's buses have. A sibling of the desk, since the
+  // desk is repainted by innerHTML.
+  masterSheet = document.createElement("div");
+  masterSheet.className = "sq-mix__master";
+  masterSheet.hidden = true;
+  masterSheet.innerHTML = `<div class="sq-mix__master-head"><b>master fx</b><span>everything goes through this bus on the way out</span><span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost" data-act="master-off" title="take the master fx bus off: everything goes straight to the master again, and its settings go with it">remove</button><button type="button" class="sq-btn--ghost" data-act="master-fx" title="hide this sheet (the bus stays in the path; the footer's master fx button shows it again)" aria-label="hide the master fx sheet">×</button></div><div class="sq-mix__master-card"></div>`;
+  root.appendChild(masterSheet);
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
   root.addEventListener("change", onChange);
@@ -225,7 +235,7 @@ export function installMixView() {
   window.addEventListener("pointercancel", release, true);
   onViewChange((v) => {
     if (v === "mix") { render(); startMeters(); }
-    else { detail.release(); stopMeters(); }
+    else { detail.release(); seatMaster(false); stopMeters(); }
   });
   for (const ev of ["seqbaby:mix", "seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, () => { scheduleMixPaint(); paintSwitchDot(); });
@@ -664,6 +674,20 @@ function xfadeRow() {
     </div>`;
 }
 
+/**
+ * The master fx bus's card into its sheet, or back to the track list (hidden
+ * there). After every paint, as the detail's is: a merge's `setTrackOrder`
+ * appends every card back into #tracks.
+ */
+function seatMaster(on) {
+  if (!masterSheet) return;
+  const slot = masterSheet.lastElementChild;
+  const mb = masterBus();
+  for (const o of state.tracks) if (o.el?.parentElement === slot && (o !== mb || !on)) restoreTrackCard(o);
+  masterSheet.hidden = !(on && mb?.el);
+  if (on && mb?.el && mb.el.parentElement !== slot) slot.appendChild(mb.el);
+}
+
 function render() {
   if (!desk || !isOpen()) return;
   if (holding) { stale = true; return; }
@@ -679,7 +703,8 @@ function render() {
   const mb = masterBus();
   // the footer drawer: the two sheets' toggles and the way to another deck
   if (foot) foot.innerHTML = `${masterBtn()}<span class="sq-mix__grow"></span><button type="button" data-act="load" title="load another song onto a new deck, to mix it with this one or move over to it">+ load a deck…</button>`;
-  desk.innerHTML = `${bar()}<div class="sq-mix__body${mb && sheets.master ? " has-master" : ""}"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>${mb && sheets.master ? `<div class="sq-mix__master"><b>master</b>${deskMix() ? "" : `<div class="sq-mix__strip is-feedhost" data-track-id="${mb.id}"><div class="sq-mix__tone is-feed">${feedKnob(mb, "the song")}</div></div>`}${strip(mb, shown)}</div>` : ""}</div>`;
+  desk.innerHTML = `${bar()}<div class="sq-mix__body"><div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div></div>`;
+  seatMaster(!!mb && sheets.master);
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
