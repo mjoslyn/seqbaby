@@ -5333,6 +5333,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__tools { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .sq-pr__tools button { border: 0; border-radius: 0; padding: 4px 9px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; }
 .sq-pr__tools button + button { border-left: 1px solid var(--border); }
+.sq-pr__ico { width: 1.1em; height: 1.1em; vertical-align: -0.18em; }
 .sq-pr__tools button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
 .sq-pr__snap, .sq-pr__nudge, .sq-pr__len, .sq-pr__zoom { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-dim); }
 .sq-pr__nudge button, .sq-pr__len button, .sq-pr__zoom button { padding: 2px 6px; font-size: 11px; min-width: 22px; }

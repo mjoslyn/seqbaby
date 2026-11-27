@@ -91,6 +91,9 @@ const ZX = [8, 12, 16, 22, 30, 42];   // px per step
 const ZY = [9, 12, 15, 19, 24];       // px per row
 const MAX_LEN = 128;
 const BLACK = new Set([1, 3, 6, 8, 10]);
+// The pan tool's hand, drawn: the ✋ character comes out as a colour emoji,
+// the one glyph in the row that ignored the button's colour.
+const PAN_ICON = `<svg class="sq-pr__ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>`;
 const TOOLS = [
   ["pan", "✋ pan", "pan: drag to scroll the roll (on a phone, one finger scrolls here and two fingers scroll and pinch in every tool)"],
   ["draw", "✎ draw", "draw: click to place a note of the last length you used and drag it into place; drag a note to move it, its right edge to resize; shift-drag copies; double-click deletes a note, right-click (or hold a finger on it) opens its step editor"],
@@ -478,7 +481,7 @@ export function createPianoEditor(opts) {
         <div class="sq-pr__bar-main">
         ${chrome.trackPicker ? `<select class="sq-pr__track" data-act="track" title="the track being edited (the computer keyboard plays it too)" aria-label="track">${trackOpts}</select>` : ""}
         <span class="sq-pr__tools" role="group" aria-label="tool">${TOOLS.map(([k, label, title]) =>
-          `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" aria-label="${k}" title="${esc(title)}">${label.slice(0, label.indexOf(" "))} <span>${label.slice(label.indexOf(" ") + 1)}</span></button>`).join("")}</span>
+          `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" aria-label="${k}" title="${esc(title)}">${k === "pan" ? PAN_ICON : label.slice(0, label.indexOf(" "))} <span>${label.slice(label.indexOf(" ") + 1)}</span></button>`).join("")}</span>
         <span class="sq-pr__nav" role="group" aria-label="scroll the roll" title="scroll the roll: back and forward across, up and down the keys (a phone's way to move about; two fingers or the pan tool do too)"><button type="button" class="sq-btn--ghost" data-act="nav-l" aria-label="scroll back">‹</button><button type="button" class="sq-btn--ghost" data-act="nav-r" aria-label="scroll forward">›</button><button type="button" class="sq-btn--ghost" data-act="nav-u" aria-label="scroll up">▲</button><button type="button" class="sq-btn--ghost" data-act="nav-d" aria-label="scroll down">▼</button></span>
         <button type="button" class="sq-pr__delbtn sq-btn--ghost sq-btn--danger" data-act="del" ${sel.size ? "" : "disabled"} title="delete the selected notes (the delete key does too)">delete</button>
         <button type="button" class="sq-pr__morebtn sq-btn--ghost" data-act="more" aria-pressed="${moreOpen}" aria-expanded="${moreOpen}" aria-label="more" title="more: snap, nudge, follow, hear, ghosts, in key, zoom">⋯</button>
