@@ -60,3 +60,24 @@ export function suggestSongName(): string {
     return "";
   }
 }
+
+/**
+ * A name for `save new`: the session's generated name, drawn again until it
+ * is not the name of the song it is being saved from (`avoid`). A new song
+ * offered its source's name reads as saving over it.
+ */
+export function suggestNewSongName(avoid: string): string {
+  const not = avoid.trim().toLowerCase();
+  if (composedTitle && composedTitle.toLowerCase() !== not) return composedTitle;
+  try {
+    const data = window.seqbaby?.serializeSet();
+    if (!data) return "";
+    for (let salt = 0; salt < 12; salt++) {
+      const name = generateSongName(data, salt);
+      if (name && name.toLowerCase() !== not) return name;
+    }
+  } catch {
+    /* an empty field, and the save names it */
+  }
+  return "";
+}

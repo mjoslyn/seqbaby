@@ -21,7 +21,7 @@
 //
 // Plain JS, no DOM: the compose job's Durable Object and `node --test` run it.
 
-import { trackRole } from "../public/js/songBuilder.js";
+import { SILVERBOX_MAX_RESO, SILVERBOX_SAFE_HZ, SILVERBOX_TOP_NOTE, silverboxPeakHz, silverboxWhistle, trackRole } from "../public/js/songBuilder.js";
 
 /** A level per role, 0..1 on the track's fader. Unity-ish for what carries
  *  the song, well under it for what fills the top. */
@@ -110,6 +110,62 @@ function nudgeOffbeats(t, p, slot) {
 }
 
 /**
+ * The one thing the pass takes DOWN instead of filling in: a silverbox that
+ * would hurt. Its resonance whistles at the filter's corner (no key
+ * tracking), so high resonance over a sweep reaching several kHz is a
+ * squeal, and a line up in octave 5 is shrill on top of it. On a silverbox
+ * this turn added or wrote: the resonance is capped, the env mod (then the
+ * cutoff) pulled back until the sweep tops out where it is safe, and the
+ * patterns it wrote come down by octaves until the top note is in range.
+ */
+function tameSilverbox(t, wrote) {
+  const did = [];
+  const floor2 = (v) => Math.floor(v * 100) / 100;   // down, never up: rounding up lands back over the line
+  const P = t.params || (t.params = {});
+  const capLane = (key, max) => {
+    for (const p of t.patterns || []) {
+      const lane = p?.automation?.[key];
+      if (lane?.enabled && Array.isArray(lane.values)) lane.values = lane.values.map((v) => (Number(v) > max ? max : v));
+    }
+  };
+  let w = silverboxWhistle(t);
+  if (w.reso > SILVERBOX_MAX_RESO) {
+    if (Number(P.timb ?? 0.5) > SILVERBOX_MAX_RESO) P.timb = SILVERBOX_MAX_RESO;
+    capLane("timb", SILVERBOX_MAX_RESO);
+    did.push(`resonance to ${SILVERBOX_MAX_RESO}`);
+    w = silverboxWhistle(t);
+  }
+  if (w.harsh) {
+    // the env mod that puts the sweep's top on the safe line, then the cutoff
+    const base = silverboxPeakHz(w.harm, w.reso, 0);
+    const morph = Math.max(0.15, Math.min(1, Math.log2(SILVERBOX_SAFE_HZ / base) / 4.2));
+    if (morph < w.morph) {
+      if (Number(P.morph ?? 0.5) > morph) P.morph = floor2(morph);
+      capLane("morph", floor2(morph));
+    }
+    w = silverboxWhistle(t);
+    if (w.harsh) {
+      const harm = Math.max(0, Math.log(SILVERBOX_SAFE_HZ / (80 * (1 - 0.16 * w.reso) * Math.pow(2, 4.2 * w.morph))) / Math.log(62.5));
+      if (Number(P.harm ?? 0.5) > harm) P.harm = floor2(harm);
+      capLane("harm", floor2(harm));
+    }
+    did.push("filter sweep under 4kHz");
+  }
+  const pats = (t.patterns || []).filter((p, i) => wrote[i]);
+  const topOf = () => Math.max(0, ...pats.flatMap((p) => p.steps.flatMap((on, s) => (on ? [p.notes?.[s], ...(p.extraNotes?.[s] || [])] : [])).filter((n) => typeof n === "number")));
+  let down = 0;
+  while (topOf() > SILVERBOX_TOP_NOTE && down < 4) {
+    for (const p of pats) {
+      p.notes = (p.notes || []).map((n) => (typeof n === "number" ? n - 12 : n));
+      if (Array.isArray(p.extraNotes)) p.extraNotes = p.extraNotes.map((x) => (Array.isArray(x) ? x.map((n) => (typeof n === "number" ? n - 12 : n)) : x));
+    }
+    down++;
+  }
+  if (down) did.push(`${down} octave${down === 1 ? "" : "s"} down`);
+  return did;
+}
+
+/**
  * Polish `song` in place.
  * @param {object} song the turn's song (songBuilder's)
  * @param {object | null} before the session the turn was handed
@@ -118,13 +174,17 @@ function nudgeOffbeats(t, p, slot) {
  */
 export function polishSong(song, before, { feel = true } = {}) {
   const done = [];
-  const levels = [], shaped = [], nudged = [];
+  const levels = [], shaped = [], nudged = [], tamed = [];
   for (const { t, added, wrote } of turnsWork(song, before)) {
     const role = trackRole(t);
     if (role === "bus") continue;
     if (added && t.params && t.params.vol == null && ROLE_LEVEL[role] != null) {
       t.params.vol = ROLE_LEVEL[role];
       levels.push(`${t.name} ${ROLE_LEVEL[role]}`);
+    }
+    if (t.engineKey === "dm:silverbox" && (added || wrote.some(Boolean))) {
+      const did = tameSilverbox(t, wrote);
+      if (did.length) tamed.push(`${t.name} (${did.join(", ")})`);
     }
     if (!feel || role === "kick" || t.euclid?.on || t.chance?.on) continue;
     let didShape = false, didNudge = false;
@@ -136,6 +196,7 @@ export function polishSong(song, before, { feel = true } = {}) {
     if (didShape) shaped.push(t.name);
     if (didNudge) nudged.push(t.name);
   }
+  if (tamed.length) done.push(`a silverbox that would have squealed, taken down: ${tamed.join(", ")}`);
   if (levels.length) done.push(`levels by role: ${levels.join(", ")}`);
   if (shaped.length) done.push(`dynamics on parts written at one velocity: ${shaped.join(", ")}`);
   if (nudged.length) done.push(`offbeats a touch late: ${nudged.join(", ")}`);

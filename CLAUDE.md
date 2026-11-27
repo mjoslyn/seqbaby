@@ -5244,7 +5244,9 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   `openSong.versionId`) and says so on the button (`saved v5`). Its name +
   public popup is only for a session with no song yet, or a template.
   **`save new` sits beside it** while a song of yours is open: a name field
-  (the open song's name, selected) and `saveSong` with no id and no parent,
+  (a freshly generated name, selected, never the open song's:
+  `suggestNewSongName`, which draws `generateSongName(data, salt)` again
+  until it differs) and `saveSong` with no id and no parent,
   always `titleGenerated`, so the name goes through `freeTitle` and keeping
   it gives `cold squelch 2` rather than landing on the song it came from
   (the songs menu's `new` does the same). The new song is what the studio
@@ -5774,6 +5776,20 @@ model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ crit
   and each rule switches itself off once applied, so the second pass at the
   end of the turn only touches what was written after the listen. The system
   prompt tells the model it happens.
+- **A silverbox that would hurt is taken down** (`silverboxWhistle`,
+  songBuilder.js; `tameSilverbox`, polish.mjs). The acid box has no key
+  tracking, so its resonance whistles at the filter's corner whatever the
+  note, and the envelope sweeps that corner up 4.2 octaves x env mod
+  (`silverboxPeakHz`, silverbox.js's own formula): timb high with harm and
+  morph both up is a squeal at 5-12kHz. `productionNotes` says so (resonance
+  over `SILVERBOX_MAX_RESO` 0.82, or `SILVERBOX_SAFE_RESO` 0.7 and up over a
+  sweep past `SILVERBOX_SAFE_HZ` 4kHz, a lane's top counted; and a line above
+  C5), and the polish pass, on a silverbox the turn added or wrote, caps the
+  resonance, pulls the env mod (then the cutoff) back until the sweep tops
+  out at 4kHz, lanes included, and brings the patterns it wrote down by
+  octaves until the top note is C5 or under. It is the one thing the polish
+  takes down instead of filling in; an in-range line is left as written
+  (tested). The guide and the turn's prompt give the same ranges.
 - **The critic turn** (`mcp/critic.mjs`). Code can say a velocity is flat;
   it cannot say the bass is in another key than the chords, that nothing is
   a hook, or that the breakdown asked for is missing, and the model that

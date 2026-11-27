@@ -301,11 +301,14 @@ function nounFamily(families, seed) {
  * blob would be an absurd way to lose work.
  *
  * @param {unknown} set a serialized session (session.js `serializeSet`)
+ * @param {number} [salt] another draw for the same session (0, the default,
+ *   is the session's own name): for `save new`, which must not offer the
+ *   name of the song it is saved from
  * @returns {string} two lowercase words, e.g. "basement squelch"
  */
-export function generateSongName(set) {
+export function generateSongName(set, salt = 0) {
   try {
-    const seed = hash32(digest(set));
+    const seed = hash32(salt ? `${digest(set)}|${salt}` : digest(set));
     const { families, empty } = familyRanking(set);
     const family = nounFamily(families, seed);
     const nouns = empty ? EMPTY_NOUNS : NOUNS[family] || NOUNS.none;

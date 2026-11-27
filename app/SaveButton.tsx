@@ -11,7 +11,7 @@ import { saveNamedSong, saveSong } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
 import { generateSongName } from "@/app/songs/songName";
-import { suggestSongName, suggestSongTags } from "@/app/songs/suggestName";
+import { suggestNewSongName, suggestSongName, suggestSongTags } from "@/app/songs/suggestName";
 import TagInput from "@/app/TagInput";
 import {
   getOpenSong,
@@ -312,7 +312,9 @@ export default function SaveButton() {
             setAsNew(next);
             setOpen(next);
             setStatus({ text: "" });
-            if (next) setTitle(openSong.title);
+            // A name of its own, not the open song's: the same name in the
+            // field reads as saving over it.
+            setTitle(next ? suggestNewSongName(openSong.title) || openSong.title : openSong.title);
           }}
           disabled={saving}
           title={`save as a separate song, leaving \u201c${openSong.title}\u201d as it is`}
@@ -333,7 +335,7 @@ export default function SaveButton() {
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={(e) => {
               if (e.key === "Enter") saveNew();
-              if (e.key === "Escape") { setOpen(false); setAsNew(false); }
+              if (e.key === "Escape") { setOpen(false); setAsNew(false); setTitle(openSong.title); }
             }}
           />
           <TagInput tags={tags} onChange={setTags} disabled={saving} />

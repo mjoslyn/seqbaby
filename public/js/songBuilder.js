@@ -1364,6 +1364,33 @@ export function validate(song) {
  * game").
  * @returns {string[]}
  */
+// ---- the silverbox's squeal ----------------------------------------------------
+//
+// silverbox.js's own corner: 80Hz x 62.5^cutoff, pulled down a little by the
+// resonance, swept up 4.2 octaves x env mod by the envelope (an accent adds
+// more). With the resonance up, that corner is a whistle. Shared by the
+// production check and the compose turn's polish pass (mcp/polish.mjs).
+export const SILVERBOX_SAFE_HZ = 4000;
+export const SILVERBOX_SAFE_RESO = 0.7;
+export const SILVERBOX_MAX_RESO = 0.82;
+export const SILVERBOX_TOP_NOTE = 72;   // C5
+export const silverboxPeakHz = (harm, timb, morph) => 80 * Math.pow(62.5, harm) * (1 - 0.16 * timb) * Math.pow(2, 4.2 * morph);
+
+/** The highest a track's cutoff, resonance and env mod get: the knobs, or a lane's top. */
+export function silverboxWhistle(t) {
+  const top = (key) => {
+    let v = Number(t.params?.[key] ?? 0.5);
+    for (const p of t.patterns || []) {
+      const lane = p?.automation?.[key];
+      if (lane?.enabled && Array.isArray(lane.values)) for (const x of lane.values) if (Number(x) > v) v = Number(x);
+    }
+    return Math.max(0, Math.min(1, v));
+  };
+  const harm = top("harm"), reso = top("timb"), morph = top("morph");
+  const peakHz = silverboxPeakHz(harm, reso, morph);
+  return { harm, reso: Math.round(reso * 100) / 100, morph, peakHz, harsh: reso > SILVERBOX_MAX_RESO || (reso >= SILVERBOX_SAFE_RESO && peakHz > SILVERBOX_SAFE_HZ) };
+}
+
 export function productionNotes(song) {
   const notes = [];
   const tracks = song.tracks || [];
@@ -1411,6 +1438,17 @@ export function productionNotes(song) {
     if (melodic && (char?.kind === "analog" || char?.kind === "raw") && pitches.length >= 8) {
       const mid = [...pitches].sort((a, b) => a - b)[pitches.length >> 1];
       if (mid >= 75) notes.push(`${label}: its notes sit around ${midiToName(mid)}. A synth up there reads as a toy beep: an octave down (two for chords) is where a lead or a pad on ${t.engineKey} sings`);
+    }
+    // The acid box has no key tracking: its resonance whistles at the
+    // filter's corner whatever the note, and the envelope sweeps that corner
+    // up to four octaves. High resonance over a sweep that reaches several
+    // kHz is a squeal that hurts at volume, and so is the line itself up in
+    // octave 5.
+    if (t.engineKey === "dm:silverbox" && hits) {
+      const w = silverboxWhistle(t);
+      if (w.harsh) notes.push(`${label}: resonance ${w.reso} with the filter sweeping up to about ${Math.round(w.peakHz / 100) / 10}kHz is a piercing whistle that hurts at volume. Keep the sweep's top under ${SILVERBOX_SAFE_HZ / 1000}kHz (lower env mod, morph, or cutoff, harm) or the resonance (timb) under ${SILVERBOX_SAFE_RESO}, lanes included`);
+      const top = pitches.length ? Math.max(...pitches) : 0;
+      if (top > SILVERBOX_TOP_NOTE) notes.push(`${label}: it reaches ${midiToName(top)}. The silverbox is a bass box: an acid lead sits between C2 and C4, and above ${midiToName(SILVERBOX_TOP_NOTE)} it is shrill. Take the line down an octave or two`);
     }
     if (t.engineKey === "plaits:12" && hits > 12) notes.push(`${label}: plaits:12 (modal) plays ${hits} notes. It is a bell or music-box colour, and as a melody it reads as a toy: dm:hexop (marimba, bell), inst:guitar-nylon or a real lead instead`);
   }

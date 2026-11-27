@@ -137,3 +137,32 @@ test("a muted track, and one that has not come in yet, are not called silent", (
   const r = sanitizeReport(heard([[-18, -6], [-120, -120], [-120, -120]]), s);
   assert.deepEqual(hearingNotes(s, r).notes, []);
 });
+
+test("a silverbox that would squeal is called out, and the polish takes it down", () => {
+  const s = song();
+  sb.setParams(s, 2, { harm: 0.7, timb: 0.95, morph: 0.8 });
+  sb.setNotes(s, 2, { notes: ["C6", "G5", "C5", "D#5"] });
+  const before = sb.silverboxWhistle(s.tracks[2]);
+  assert.ok(before.harsh && before.peakHz > 10000, "it is a squeal as written");
+  const notes = sb.productionNotes(s).join("\n");
+  assert.match(notes, /piercing whistle/);
+  assert.match(notes, /bass box/);
+  const did = polishSong(s, null).join("\n");
+  assert.match(did, /silverbox that would have squealed/);
+  const after = sb.silverboxWhistle(s.tracks[2]);
+  assert.ok(!after.harsh, "no longer harsh");
+  assert.ok(after.reso <= sb.SILVERBOX_MAX_RESO && after.peakHz <= sb.SILVERBOX_SAFE_HZ * 1.02);
+  const p = s.tracks[2].patterns[0];
+  const top = Math.max(...p.notes.filter((n, i) => p.steps[i] && typeof n === "number"));
+  assert.ok(top <= sb.SILVERBOX_TOP_NOTE, "the line is in range");
+  assert.doesNotMatch(sb.productionNotes(s).join("\n"), /piercing whistle|bass box/);
+  assert.deepEqual(polishSong(s, blob(s)), [], "a second pass has nothing to do");
+});
+
+test("an ordinary acid line is left exactly as written", () => {
+  const s = song();
+  sb.setParams(s, 2, { harm: 0.35, timb: 0.68, morph: 0.45, vol: 0.7 });
+  const was = blob(s.tracks[2]);
+  polishSong(s, null, { feel: false });
+  assert.deepEqual(blob(s.tracks[2]), was);
+});

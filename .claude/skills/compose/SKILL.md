@@ -181,7 +181,14 @@ after a fill, toms only in fills. In code, `.bank("salamander")` (or
 Bass: `dm:silverbox` for acid and anything squelchy: harm is cutoff, timb
 resonance, morph the envelope depth, decay the envelope; an ACCENT comes from
 velocity above 0.6 (`X`), a SLIDE from a tie into the next note (`x_x`); set
-`sbaccent` 0.6..1 for how much accents do. `dm:sub` (subby) for 808 bass,
+`sbaccent` 0.6..1 for how much accents do. It has no key tracking, so its
+resonance WHISTLES at the filter's corner whatever the note, and the envelope
+sweeps that corner up four octaves x morph: timb over 0.7 with harm and morph
+both up is a squeal at several kHz that hurts. Keep timb 0.45..0.7; with timb
+over 0.7 keep harm under about 0.45 and morph under about 0.5 (lanes
+included), and open the cutoff with a lane rather than by parking everything
+high. As a lead it is still a bass box: write it between C2 and C4, never
+above C5. `dm:sub` (subby) for 808 bass,
 sub, reese, drill: `apply_preset` "808", "distorted 808", "reese", "acid",
 "dub", "drill slide", "memphis", "house sub", "growl", "cinematic drop"; it
 is monophonic and its drive is what makes it audible on a small speaker, so
