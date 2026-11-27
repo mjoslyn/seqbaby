@@ -6084,6 +6084,21 @@ discard    throw them away (putting back the pre-audition session first)
   in somebody's list under a name they never saw, so the line where the review
   bar was says `press save to keep it for good` instead. It says what happened
   either way: a `keep` that kept nothing anywhere is the thing worth knowing.
+- **A new song written over the open one asks where it is saved.** A
+  proposal is `newSong` when the genre tab built it, or when nothing the
+  session had written survives in what came back (`replacesAll`, by engine +
+  name). With a song of the account's open, the review card then has two
+  keeps: `keep + save new song` (`autosaveKept({title, tags})`: `saveSong`
+  with no id, `titleGenerated`, the turn's name or `suggestNewSongName`, the
+  open-song slot moved onto it, the transcript adopted by it) and `keep +
+  save as its next version` (the ordinary autosave). An ordinary edit keeps
+  its one `keep + save`.
+- **A genre build asks about unsaved changes first** (`buildGroove`,
+  `pendingBuild`): with a song of the account's open and
+  `hasUnsavedChanges()`, a card in the drawer (not an engine dialog, which
+  would sit under the drawer) offers `save, then build` (the open song's
+  next version), `build without saving` or `cancel`. Only the genre tab:
+  a typed ask is not known to be a new song until it comes back.
 - **Sending the next message settles the last proposal.** The session being
   serialized is what the model is being asked about, so whatever is in the
   engine — an audition included — is what that turn builds on, and there is

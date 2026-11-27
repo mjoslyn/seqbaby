@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
-import { addComposedTags, setComposedTitle } from "@/app/songs/suggestName";
+import { addComposedTags, setComposedTitle, suggestNewSongName } from "@/app/songs/suggestName";
 import { genreById } from "@/app/songs/genres";
 import { normalizeTags } from "@/lib/songTags.js";
 import GroovePicker from "@/app/GroovePicker";
@@ -105,7 +105,24 @@ type Proposal = {
   job?: { id: string; t?: string };
   /** It has been auditioned at least once. */
   auditioned?: boolean;
+  /**
+   * The turn wrote a new song over the open one (a genre build, or nothing of
+   * what was there survives), so `keep` asks where it is saved: as a song of
+   * its own, or as the open song's next version.
+   */
+  newSong?: boolean;
 };
+
+/** Nothing the session sent had written survives in what came back. */
+function replacesAll(sent: unknown, got: unknown): boolean {
+  type T = { engineKey?: string; name?: string; patterns?: { steps?: unknown[] }[] };
+  const tracks = (x: unknown): T[] => ((x as { tracks?: T[] })?.tracks ?? []).filter((t) => t.engineKey !== "bus");
+  const key = (t: T) => `${t.engineKey}\n${t.name}`;
+  const had = tracks(sent).filter((t) => t.patterns?.some((p) => p?.steps?.some(Boolean)));
+  if (!had.length) return false;
+  const now = new Set(tracks(got).map(key));
+  return had.every((t) => !now.has(key(t)));
+}
 
 type JobStatus = {
   status?: "running" | "done" | "error";
@@ -512,6 +529,7 @@ export default function ComposeChat({
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
+  const openTitle = openSong.title;
 
   // A key kept by an earlier version of this panel is a secret with no use
   // left: clear it.
@@ -762,7 +780,8 @@ export default function ComposeChat({
       // prompt, else what the turn said the song is.
       const tags = normalizeTags([(meta?.genre && (genreById(meta.genre) as { name?: string } | undefined)?.name) || job.genre || ""]);
       if (job.session && job.changed !== false) {
-        setReview({ session: job.session, before: null, title: job.title ?? null, tags, changes, job: ref, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
+        const newSong = !toB && (!!meta?.genre || replacesAll(session, job.session));
+        setReview({ session: job.session, before: null, title: job.title ?? null, tags, changes, job: ref, ...(newSong ? { newSong } : {}), ...(toB ? { deck: deckId, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
       // the song's at once; otherwise it comes with the changes, on keep.
@@ -882,7 +901,7 @@ export default function ComposeChat({
   // row in somebody's list under a name they never saw. The note says so
   // rather than saying nothing, since "keep" having kept nothing anywhere is
   // the thing worth knowing.
-  const autosaveKept = useCallback(async () => {
+  const autosaveKept = useCallback(async (as?: { title?: string | null; tags?: string[] }) => {
     const now = getOpenSong();
     if (!signedIn) return setSaveNote("");
     if (now.isTemplate) return setSaveNote("kept. press save to make this a song of its own");
@@ -893,6 +912,24 @@ export default function ComposeChat({
     // changes plus anything moved by hand since, which is the right answer to
     // "keep what I am hearing" and the same answer the review bar gives.
     const data = window.seqbaby.serializeSet();
+    // A new song written over the open one, kept as a song of its own: the
+    // open song is left as it was last saved, and the studio holds the new
+    // one from here. Its name is the turn's, else a generated one that is
+    // not the open song's; the server gives a taken name a number.
+    if (as) {
+      const title = as.title?.trim() || suggestNewSongName(now.title) || now.title;
+      const res = await trySave(data, () => saveSong({ title, data, titleGenerated: true, tags: as.tags, label: "compose" }));
+      if (res.error) return setSaveNote(`kept, but not saved: ${res.error}`);
+      markSaved(data);
+      const saved = res.title ?? title;
+      // The conversation that built it goes with it: attached to nothing, it
+      // is adopted by the song the slot names next (the song-change effect).
+      attachedRef.current = null;
+      setOpenSong({ id: res.id ?? null, title: saved, versionId: res.versionId ?? null, isTemplate: false });
+      // After that effect, which clears the note with the old song.
+      setTimeout(() => setSaveNote(`kept · saved as a new song, \u201c${saved}\u201d`), 60);
+      return;
+    }
     // Labelled `compose` and nothing more, so the tree still says which saves
     // nobody pressed. Not with what was asked for: that would copy the
     // transcript into song_versions, a second table whose privacy it would
@@ -923,7 +960,7 @@ export default function ComposeChat({
   // Keep: the changes are the song now. Mid-audition there is nothing to write
   // -- the engine is already playing them, hand edits and all. Otherwise they
   // are written in now, and saved.
-  const keepChanges = useCallback(async () => {
+  const keepChanges = useCallback(async (where?: "new" | "version") => {
     const r = review;
     const api = window.seqbaby;
     if (!r || !api) return;
@@ -946,7 +983,8 @@ export default function ComposeChat({
     // Its genre goes on the song: at once when one of the account's own is
     // open (added to its tags, never replacing them), else into what the save
     // box will offer when the song is first saved.
-    if (r.tags?.length) {
+    const asNew = where === "new";
+    if (r.tags?.length && !asNew) {
       const now = getOpenSong();
       if (signedIn && now.id && !now.isTemplate) void addSongTags(now.id, r.tags).catch(() => {});
       else addComposedTags(r.tags);
@@ -956,7 +994,7 @@ export default function ComposeChat({
     // drawer goes, and what the save did is said in the studio's status line
     // (the effect on saveNote below), where it is still seen.
     setOpen(false);
-    void autosaveKept();
+    void autosaveKept(asNew ? { title: r.title, tags: r.tags } : undefined);
   }, [review, writeLive, autosaveKept, writeDeckB, deckGone, audition, signedIn]);
 
   const discardChanges = useCallback(() => {
@@ -973,7 +1011,7 @@ export default function ComposeChat({
   // The genre tab (GroovePicker.tsx) starts a turn from a genre: its brief
   // goes in the box and is sent as an ordinary turn, so it lands in the
   // review bar like any other and stays in the box if the turn cannot run.
-  const buildGroove = useCallback(
+  const startBuild = useCallback(
     (prompt: string, meta?: { genre: string; seed: number }) => {
       setTab("chat");
       setInput(prompt);
@@ -981,6 +1019,37 @@ export default function ComposeChat({
     },
     [send],
   );
+  // A genre build writes a new song over the open one. When that is a song of
+  // the account's with changes not saved yet, it asks first (a card in the
+  // drawer, not a dialog: an engine modal sits under the drawer).
+  const [pendingBuild, setPendingBuild] = useState<{ prompt: string; meta?: { genre: string; seed: number } } | null>(null);
+  const [savingFirst, setSavingFirst] = useState(false);
+  const buildGroove = useCallback(
+    (prompt: string, meta?: { genre: string; seed: number }) => {
+      const now = getOpenSong();
+      const dirty = signedIn && deck === "a" && !!now.id && !now.isTemplate && !!window.seqbaby?.hasUnsavedChanges?.();
+      if (dirty) return setPendingBuild({ prompt, meta });
+      startBuild(prompt, meta);
+    },
+    [startBuild, signedIn, deck],
+  );
+  const resolveBuild = useCallback(async (how: "save" | "skip" | "cancel") => {
+    const b = pendingBuild;
+    if (!b || savingFirst) return;
+    if (how === "cancel") return setPendingBuild(null);
+    if (how === "save" && window.seqbaby) {
+      const now = getOpenSong();
+      const data = window.seqbaby.serializeSet();
+      setSavingFirst(true);
+      const res = await trySave(data, () => saveSong({ id: now.id ?? undefined, title: now.title, data, parentVersionId: now.versionId ?? undefined }));
+      setSavingFirst(false);
+      if (res.error) return setSaveNote(`not saved: ${res.error}`);
+      markSaved(data);
+      if (res.versionId) setOpenSong({ versionId: res.versionId });
+    }
+    setPendingBuild(null);
+    startBuild(b.prompt, b.meta);
+  }, [pendingBuild, savingFirst, startBuild]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1204,6 +1273,27 @@ export default function ComposeChat({
             )}
           </div>
           {!review && saveNote && <div className={styles.cxNote}>{saveNote}</div>}
+          {pendingBuild && (
+            <section className={styles.chatReview} aria-label="unsaved changes">
+              <div className={styles.cxReviewHead}>
+                <span className={styles.cxReviewTitle}>unsaved changes</span>
+              </div>
+              <div className={styles.chatReviewText}>
+                &ldquo;{openTitle}&rdquo; has changes that are not saved. The build writes a new song over it: save them as its next version first?
+              </div>
+              <div className={styles.chatReviewBtns}>
+                <button className={`${styles.smallBtn} ${styles.smallBtnPrimary}`} onClick={() => resolveBuild("save")} disabled={savingFirst}>
+                  {savingFirst ? "saving…" : "save, then build"}
+                </button>
+                <button className={styles.smallBtn} onClick={() => resolveBuild("skip")} disabled={savingFirst} title="build without saving them; undo can still bring them back until the page is left">
+                  build without saving
+                </button>
+                <button className={`${styles.smallBtn} ${styles.cxDiscard}`} onClick={() => resolveBuild("cancel")} disabled={savingFirst}>
+                  cancel
+                </button>
+              </div>
+            </section>
+          )}
           {review && (
             <section className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`} aria-label="changes to review">
               <div className={styles.cxReviewHead}>
@@ -1226,16 +1316,23 @@ export default function ComposeChat({
                 >
                   {review.fresh ? "load to a deck" : review.before ? "■ stop" : "▶ audition"}
                 </button>
-                {!review.fresh && <button
+                {!review.fresh && review.newSong && signedIn && songId && !isTemplate && !review.deck && <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
-                  onClick={keepChanges}
+                  onClick={() => keepChanges("new")}
+                  title={`keep it, and save it as a song of its own. \u201c${openTitle}\u201d stays as it was last saved`}
+                >
+                  keep + save new song
+                </button>}
+                {!review.fresh && <button
+                  className={`${styles.smallBtn} ${review.newSong && signedIn && songId && !isTemplate && !review.deck ? "" : styles.smallBtnPrimary}`}
+                  onClick={() => keepChanges("version")}
                   title={review.deck ? "leave them on the deck (saved once it is the song, or the decks are kept as one)" :
                     signedIn && songId && !isTemplate
                       ? "make them part of the song, and save it as a new version"
                       : "make them part of the song"
                   }
                 >
-                  {signedIn && songId && !isTemplate && !review.deck ? "keep + save" : "keep"}
+                  {signedIn && songId && !isTemplate && !review.deck ? (review.newSong ? "keep + save as its next version" : "keep + save") : "keep"}
                 </button>}
                 <button className={`${styles.smallBtn} ${styles.cxDiscard}`} onClick={discardChanges} title="throw them away">
                   discard
