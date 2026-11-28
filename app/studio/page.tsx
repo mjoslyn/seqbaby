@@ -22,6 +22,7 @@ import { linkedSong, linkedSongCard, jamHostName } from "@/app/songs/linkedSongT
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
 import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel } from "@/lib/composeModels.js";
 import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
+import { FREE_COOKIE, freeBuckets, freeConfig, readFree } from "@/lib/freeCompose.js";
 import { cookies } from "next/headers";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -160,6 +161,27 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   const defaultModel = env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL;
   const models = allowedModels({ picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS), unlocked, defaultModel });
 
+  // Free compose (lib/freeCompose.js): a few turns on Haiku with no account.
+  // How many are left is asked of the visitor's limits object only when they
+  // already have the cookie; never throws, it is on the render path.
+  let free: { turns: number; left: number | null; check: boolean } | null = null;
+  if (!user && !unlocked) {
+    const cfg = freeConfig(env as unknown as Record<string, string | undefined>);
+    if (cfg.on) {
+      const freeId = await readFree((await cookies()).get(FREE_COOKIE)?.value, cfg.secret).catch(() => null);
+      let left: number | null = null;
+      if (freeId) {
+        try {
+          const limits = env.COMPOSE_LIMITS.get(env.COMPOSE_LIMITS.idFromName(freeBuckets.visitor(freeId)));
+          left = await limits.freeLeft(cfg.turns, cfg.windowMs);
+        } catch {
+          left = null;
+        }
+      }
+      free = { turns: cfg.turns, left, check: !freeId && !!env.TURNSTILE_SECRET_KEY };
+    }
+  }
+
   // Whether the deploy has a key of its own decides what the compose panel
   // offers: read here, in a server component, because the browser must not be
   // told anything about it beyond whether it exists.
@@ -173,6 +195,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       budgetOut={budgetOut}
       models={models}
       unlocked={unlocked}
+      free={free}
       defaultModel={defaultModel}
       viewing={viewing}
     />

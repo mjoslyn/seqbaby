@@ -708,6 +708,10 @@ a.bylineLike { text-decoration: none; }
 /* The bar is inside the drawer, so a closed drawer says nothing about an
    audition that is still playing. The button does. */
 .composeBtnHolding { border-color: #6ee7b7; color: #6ee7b7; }
+/* free compose (lib/freeCompose.js): turns left, the way to more, the robot check */
+.cxFree { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; padding: 8px 10px; border: 1px dashed #2a2d35; border-radius: 8px; }
+.cxFreeLine { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; color: #dfe3ea; font-size: 12px; }
+.cxFreeHint { color: #9aa0aa; font-size: 11px; }
 
 /* The groove picker (GroovePicker.tsx), a tab of the compose drawer: a
    search, family chips, a long scrolling list and the picked genre's brief.

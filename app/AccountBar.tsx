@@ -7,7 +7,7 @@ import MixSongs from "@/app/MixSongs";
 import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
-import ComposeChat from "@/app/ComposeChat";
+import ComposeChat, { type FreeCompose } from "@/app/ComposeChat";
 import JamPanel from "@/app/JamPanel";
 import { getOpenSong } from "@/app/songs/openSong";
 import { IconMenu } from "@/app/menuIcons";
@@ -40,6 +40,7 @@ export function AccountBar({
   budgetOut = false,
   models = [],
   unlocked = false,
+  free = null,
   defaultModel,
   viewing = null,
 }: {
@@ -62,6 +63,8 @@ export function AccountBar({
   models?: { id: string; label: string }[];
   /** Opened an unlock link (lib/unlock.js): compose without an account. */
   unlocked?: boolean;
+  /** Free compose with no account (lib/freeCompose.js), when offered. */
+  free?: FreeCompose | null;
   /** The deploy's own compose model. */
   defaultModel?: string;
   /** Someone else's song, named by the URL: drawn as "title by @owner". */
@@ -203,6 +206,7 @@ export function AccountBar({
           budgetOut={budgetOut}
           models={models}
           unlocked={unlocked}
+          free={free}
           defaultModel={defaultModel}
         />
         <button

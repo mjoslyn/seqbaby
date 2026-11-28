@@ -5818,6 +5818,18 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   `COMPOSE_MODEL_PICKERS` still gets every model), and the route honours a
   pick only from that list. Signed out there is no song to save into, so a
   kept turn says to press save. `test/unlock.test.js`.
+- **Free compose: a few turns with no account** (`lib/freeCompose.js`, on
+  wherever a signing secret exists; `COMPOSE_FREE_TURNS=0` turns it off). A
+  signed-out visitor without an unlock gets `COMPOSE_FREE_TURNS` (10) turns per
+  `COMPOSE_FREE_WINDOW_DAYS` (30), always on `FREE_MODEL` (Haiku), whatever
+  the browser asks for. Three limits, each a `ComposeLimits` object, taken in
+  order and given back if a later one refuses: the visitor (`free/<id>`, a
+  signed cookie `sq_free` minted by the compose route, after Turnstile when
+  `TURNSTILE_SECRET_KEY` is set: `lib/turnstile.js`, `app/turnstile.ts`), the
+  address (`freeip/<hmac of the IP>`, `COMPOSE_FREE_IP_PER_DAY`), and the site
+  (`free-site`, `COMPOSE_FREE_SITE_PER_DAY`), which bounds the worst case. A
+  refusal answers `signup: true`; the panel's `FreeStrip` says how many are
+  left and links to sign up. `test/freeCompose.test.js`.
 - **The view token is how a browser proves a job is its own** to poll: a job
   holds somebody's song. An account still reaches its own jobs without one. The
   status route tries the token first and only then resolves a session: this

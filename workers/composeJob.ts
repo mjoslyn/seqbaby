@@ -28,6 +28,7 @@ import {
   takeSlot,
 } from "../lib/composeJobs.js";
 import { describeTurnFailure, isOutOfCredit } from "../lib/composeKey.js";
+import { dropDaily, dropWindow, takeDaily, takeWindow, windowLeft } from "../lib/freeCompose.js";
 import { recordTurn } from "../lib/data/composeTurns.js";
 
 setComposeGuide(guide);
@@ -290,5 +291,34 @@ export class ComposeLimits extends DurableObject<CloudflareEnv> {
 
   async release(id: string): Promise<void> {
     await this.ctx.storage.put("rec", releaseSlot(await this.ctx.storage.get("rec"), id));
+  }
+
+  // Free compose (lib/freeCompose.js). A visitor's turns in a rolling window,
+  // kept beside the in-flight record above in the visitor's own object.
+  async takeFree(id: string, limit: number, windowMs: number): Promise<{ left?: number; error?: string }> {
+    const next = takeWindow(await this.ctx.storage.get("free"), id, limit, windowMs);
+    if ("error" in next) return { error: next.error, left: 0 };
+    await this.ctx.storage.put("free", next.rec);
+    return { left: next.left };
+  }
+
+  async dropFree(id: string): Promise<void> {
+    await this.ctx.storage.put("free", dropWindow(await this.ctx.storage.get("free"), id));
+  }
+
+  async freeLeft(limit: number, windowMs: number): Promise<number> {
+    return windowLeft(await this.ctx.storage.get("free"), limit, windowMs);
+  }
+
+  // A count per UTC day: an address's free turns, or the whole site's.
+  async takeDay(limit: number): Promise<{ ok?: true; error?: string }> {
+    const next = takeDaily(await this.ctx.storage.get("day"), limit);
+    if ("error" in next) return { error: next.error };
+    await this.ctx.storage.put("day", next.rec);
+    return { ok: true };
+  }
+
+  async dropDay(): Promise<void> {
+    await this.ctx.storage.put("day", dropDaily(await this.ctx.storage.get("day")));
   }
 }

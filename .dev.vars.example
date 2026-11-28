@@ -25,6 +25,14 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 # A code shared as /studio?unlock=<code>: compose without an account, and
 # sonnet / opus in its model menu. Change it to rotate (old links and cookies stop).
 # COMPOSE_UNLOCK_CODE=some-code
+# Free compose with no account, on Haiku (lib/freeCompose.js). On by default
+# wherever BETTER_AUTH_SECRET is set; COMPOSE_FREE_TURNS=0 switches it off.
+# With TURNSTILE_SECRET_KEY set (and NEXT_PUBLIC_TURNSTILE_SITE_KEY at build),
+# a visitor's first free turn needs the robot check.
+# COMPOSE_FREE_TURNS=10
+# COMPOSE_FREE_WINDOW_DAYS=30
+# COMPOSE_FREE_IP_PER_DAY=20
+# COMPOSE_FREE_SITE_PER_DAY=2000
 
 # Superbugs page (app/superbugs, app/api/bugs) — OPTIONAL. A fine-grained GitHub
 # token with Issues: write on the repo. Without it the form falls back to a

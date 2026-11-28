@@ -18,6 +18,15 @@ interface CloudflareEnv {
    *  without an account and offers sonnet and opus. Rotate it to cut off every
    *  link and cookie handed out under the old one. */
   COMPOSE_UNLOCK_CODE?: string;
+  /** Free compose with no account (lib/freeCompose.js): turns per visitor per
+   *  window (default 10, "0" switches it off), the window in days (30), turns
+   *  per IP per day (20), turns for the whole site per day (2000), and the
+   *  secret the visitor cookie is signed with (else BETTER_AUTH_SECRET). */
+  COMPOSE_FREE_TURNS?: string;
+  COMPOSE_FREE_WINDOW_DAYS?: string;
+  COMPOSE_FREE_IP_PER_DAY?: string;
+  COMPOSE_FREE_SITE_PER_DAY?: string;
+  COMPOSE_FREE_SECRET?: string;
   /** A freesound.org API key (lib/freesound.js): sound search in the sampler's
    *  picker and in a compose turn. Without it neither is offered. */
   FREESOUND_API_KEY?: string;

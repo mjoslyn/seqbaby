@@ -16,6 +16,7 @@ import { DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
 import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import { diffHeadline, diffSessions } from "@/app/songs/sessionDiff.js";
 import { canHear, hearForJob, reportOutcome } from "@/app/composeHear";
+import { TURNSTILE_SITE_KEY, loadTurnstile } from "@/app/turnstile";
 import styles from "@/app/ui.module.css";
 
 /** One tool call of a turn: what it did in a few words, and whether it worked. */
@@ -67,7 +68,27 @@ const STARTERS: { label: string; text: string }[] = [
   { label: "ask about it", text: "what would make this groove hit harder?" },
 ];
 
-type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
+type ComposeResponse = {
+  jobId?: string;
+  jobToken?: string;
+  error?: string;
+  /** Free compose (lib/freeCompose.js): turns left after this one. */
+  freeLeft?: number | null;
+  /** The answer is "make an account": a free limit ran out, or none is offered. */
+  signup?: boolean;
+  /** The route wants a Turnstile token before a visitor's first free turn. */
+  check?: boolean;
+};
+
+/** Free compose with no account, as the studio page found it. */
+export type FreeCompose = {
+  /** Turns per window (COMPOSE_FREE_TURNS). */
+  turns: number;
+  /** Left in the window, or null when this browser has not used one yet. */
+  left: number | null;
+  /** The first turn needs the robot check. */
+  check: boolean;
+};
 
 /**
  * A turn's changes, sitting between the model and the studio.
@@ -216,6 +237,7 @@ async function runTurn(
   body: Record<string, unknown>,
   onActivity?: (steps: Step[]) => void,
   live?: () => boolean,
+  onReply?: (r: ComposeResponse, ok: boolean) => void,
 ): Promise<{ job: JobStatus; activity: Step[]; ref: { id: string; t?: string } } | { error: string }> {
   const res = await fetch("/api/compose", {
     method: "POST",
@@ -235,10 +257,12 @@ async function runTurn(
     } catch {
       data = null;
     }
+    if (data) onReply?.(data, false);
     return { error: describeFailure(res.status, raw, data) };
   }
 
   const started = (await res.json()) as ComposeResponse;
+  onReply?.(started, true);
   if (!started.jobId) return { error: started.error ?? "couldn't start that" };
 
   // The turn is running somewhere nothing is waiting on, so from here it
@@ -400,6 +424,7 @@ export default function ComposeChat({
   budgetOut,
   models = [],
   unlocked = false,
+  free = null,
   defaultModel = DEFAULT_COMPOSE_MODEL,
 }: {
   signedIn: boolean;
@@ -412,14 +437,26 @@ export default function ComposeChat({
   models?: { id: string; label: string }[];
   /** Opened an unlock link (lib/unlock.js): compose without an account. */
   unlocked?: boolean;
+  /** Free turns with no account (lib/freeCompose.js), when offered. */
+  free?: FreeCompose | null;
   /** The deploy's own model, what the menu starts on. */
   defaultModel?: string;
 }) {
   // The picked model, remembered per browser. Only sent when there is a menu;
   // anything the route does not allow runs on the deploy's model.
   const canPickModel = models.length > 1;
-  // An account, or an unlock link's cookie: either may compose.
-  const canCompose = signedIn || unlocked;
+  // An account, an unlock link's cookie, or a free turn: any may compose.
+  const isFree = !signedIn && !unlocked && !!free;
+  const canCompose = signedIn || unlocked || isFree;
+  // Free turns left (null: none used yet, so all of them), whether the robot
+  // check still stands before the first one, and its token once passed.
+  const [freeLeft, setFreeLeft] = useState<number | null>(free?.left ?? null);
+  const [needCheck, setNeedCheck] = useState(!!free?.check && !!TURNSTILE_SITE_KEY);
+  const [checkToken, setCheckToken] = useState("");
+  // Bumped to draw a fresh widget when a token was refused (each is single use).
+  const [checkRound, setCheckRound] = useState(0);
+  const freeOut = isFree && freeLeft === 0;
+  const freeBlocked = isFree && (freeOut || (needCheck && !checkToken));
   const modelIds = models.map((m) => m.id).join(",");
   const [model, setModel] = useState(defaultModel);
   useEffect(() => {
@@ -526,6 +563,19 @@ export default function ComposeChat({
   // Out of budget, or no key on the deploy at all: compose is switched off,
   // and the button says why (an open review bar still has to be reachable).
   const composeOff = (siteDry || !serverKey) && !review;
+  // What a turn's start says back about free compose.
+  const onFreeReply = useCallback((r: ComposeResponse, ok: boolean) => {
+    if (typeof r.freeLeft === "number") setFreeLeft(r.freeLeft);
+    if (r.check) {
+      setCheckToken("");
+      setNeedCheck(!!TURNSTILE_SITE_KEY);
+      setCheckRound((n) => n + 1);
+    } else if (ok) {
+      setNeedCheck(false);
+      setCheckToken("");
+    }
+    if (r.signup && !ok && r.freeLeft === 0) setFreeLeft(0);
+  }, []);
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
@@ -677,7 +727,7 @@ export default function ComposeChat({
   const send = useCallback(async (prompt?: string, modelOverride?: string, meta?: { genre: string; seed: number }) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
-    if (!canCompose) return;
+    if (!canCompose || freeBlocked) return;
     // A turn on deck B is sent that deck's song, or, with nothing loaded
     // there, an empty session to write a new one in: the open song's tempo, so
     // the two mix, and a line saying what it is for.
@@ -757,8 +807,11 @@ export default function ComposeChat({
           // This browser will play the turn's song back when asked.
           canHear: canHear(),
           meta: meta ? { kind: "genre", ...meta } : { kind: toB ? "deck" : "ask" },
+          ...(checkToken ? { turnstile: checkToken } : {}),
         },
         setLive,
+        undefined,
+        onFreeReply,
       );
       if ("error" in out) {
         land({ role: "error", text: out.error });
@@ -803,7 +856,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, canCompose, canPickModel, model, deck, letGo]);
+  }, [input, sending, messages, canCompose, canPickModel, model, deck, letGo, checkToken, onFreeReply, freeBlocked]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -1165,7 +1218,16 @@ export default function ComposeChat({
               ×
             </button>
           </div>
-          {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff} />}
+          {isFree && (
+            <FreeStrip
+              key={checkRound}
+              turns={free!.turns}
+              left={freeLeft}
+              check={needCheck}
+              onToken={setCheckToken}
+            />
+          )}
+          {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff || freeBlocked} />}
           <div className={styles.chatLog} ref={logRef} hidden={tab !== "chat"}>
             {messages.length === 0 && !sending && (
               <div className={styles.cxEmpty}>
@@ -1384,13 +1446,90 @@ export default function ComposeChat({
               <button
                 className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                 onClick={() => send()}
-                disabled={sending || !input.trim() || composeOff}
+                disabled={sending || !input.trim() || composeOff || freeBlocked}
               >
                 {sending ? "working…" : "send"}
               </button>
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Free compose's line in the drawer: how many turns are left, the way to more,
+ * and the robot check before the first one (app/turnstile.ts).
+ */
+function FreeStrip({
+  turns,
+  left,
+  check,
+  onToken,
+}: {
+  turns: number;
+  left: number | null;
+  check: boolean;
+  onToken: (t: string) => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const widget = useRef<string | null>(null);
+  const [checkErr, setCheckErr] = useState("");
+  useEffect(() => {
+    if (!check || !TURNSTILE_SITE_KEY) return;
+    let gone = false;
+    loadTurnstile()
+      .then((ts) => {
+        if (gone || !box.current) return;
+        widget.current = ts.render(box.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme: "auto",
+          size: "flexible",
+          callback: (t: string) => {
+            onToken(t);
+            setCheckErr("");
+          },
+          "expired-callback": () => onToken(""),
+          "error-callback": () => {
+            onToken("");
+            setCheckErr("the robot check failed, try again");
+          },
+        });
+      })
+      .catch(() => {
+        if (!gone) setCheckErr("the robot check did not load (an ad blocker?)");
+      });
+    return () => {
+      gone = true;
+      if (widget.current) window.turnstile?.remove(widget.current);
+      widget.current = null;
+    };
+  }, [check, onToken]);
+  const n = left ?? turns;
+  const signup = () => {
+    location.href = signupHref(location.pathname + location.search);
+  };
+  return (
+    <div className={styles.cxFree}>
+      <div className={styles.cxFreeLine}>
+        <span>
+          {n === 0
+            ? `that's your ${turns} free turns.`
+            : left === null
+            ? `${turns} free turns, no account needed.`
+            : `${n} of ${turns} free turns left.`}
+        </span>
+        <button type="button" className={styles.smallBtn} onClick={signup}>
+          {n === 0 ? "make an account to keep going" : "make an account for more"}
+        </button>
+      </div>
+      {check && TURNSTILE_SITE_KEY && n > 0 && (
+        <>
+          <div className={styles.cxFreeHint}>one quick check before your first song:</div>
+          <div ref={box} />
+          {checkErr && <div className={styles.cxFreeHint}>{checkErr}</div>}
+        </>
       )}
     </div>
   );

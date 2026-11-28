@@ -3,39 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./superbugs.module.css";
 import { STUDIO_KEY, contextMarkdown, contextRows, pickContext } from "./bugContext";
+import { TURNSTILE_SITE_KEY, loadTurnstile } from "@/app/turnstile";
 
 const ISSUES = "https://github.com/mjoslyn/seqbaby/issues";
 
-// Cloudflare Turnstile. Inlined at build; unset means no widget (local dev),
+// Cloudflare Turnstile (app/turnstile.ts). Unset means no widget (local dev),
 // and the route only demands a token when its secret is set.
-const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-const TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-
-type Turnstile = {
-  render: (el: HTMLElement, opts: Record<string, unknown>) => string;
-  reset: (id: string) => void;
-  remove: (id: string) => void;
-};
-declare global {
-  interface Window {
-    turnstile?: Turnstile;
-  }
-}
-
-function loadTurnstile(): Promise<Turnstile> {
-  if (window.turnstile) return Promise.resolve(window.turnstile);
-  return new Promise((resolve, reject) => {
-    let s = document.querySelector<HTMLScriptElement>(`script[src="${TURNSTILE_SRC}"]`);
-    if (!s) {
-      s = document.createElement("script");
-      s.src = TURNSTILE_SRC;
-      s.async = true;
-      document.head.appendChild(s);
-    }
-    s.addEventListener("load", () => (window.turnstile ? resolve(window.turnstile) : reject()));
-    s.addEventListener("error", () => reject());
-  });
-}
+const SITE_KEY = TURNSTILE_SITE_KEY;
 
 type Context = ReturnType<typeof pickContext>;
 
