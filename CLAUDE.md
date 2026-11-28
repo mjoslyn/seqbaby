@@ -69,7 +69,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── set/[id]/              the set player: a recorded live set replayed in the studio (SetPlayer.tsx, forkStore.ts)
-│   ├── GroovePicker.tsx + songs/genres.js (+ genrePlansMore.js, the second half of the plans)  the compose panel's `genre` tab: search 162 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
+│   ├── GroovePicker.tsx + songs/genres.js (+ genrePlansMore.js, the second half of the plans)  the compose panel's `genre` tab: search 170 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
@@ -5478,7 +5478,7 @@ owner types. They are the song's, not a version's.
   them alone**: the quick save and the compose autosave send none, and
   `tags: []` is the only way a save clears them. A remix copies its source's.
 - **The field is `TagInput`**: chips and an input whose suggestions are the
-  162 genre names (a native `datalist`, so no popup inside a popup). Enter
+  170 genre names (a native `datalist`, so no popup inside a popup). Enter
   or a comma ends a tag, backspace in an empty field takes the last back,
   and what is typed when the field loses focus becomes a tag. In the save
   box (both the first save and `save new`), and under a songs-menu row
@@ -6077,7 +6077,7 @@ Groove is a TAB of the compose drawer (`ask | genre` in its head; the tab
 says `genre` because `groove` is already the name of the track-list view), not a
 button of its own: it was one, beside `compose`, with a second drawer, a
 second model menu and an event between the two. The tab holds the picker: a
-search box with autocomplete over 162 genres (by name,
+search box with autocomplete over 170 genres (by name,
 alias, family, then brief: `searchGenres`), family filter chips
 (`GENRE_FAMILIES`), the picked genre's tempo and brief, an optional "anything
 else" box, `surprise me` and `build`. A genre is a short brief in
@@ -6104,7 +6104,7 @@ range and a list of instruments a model takes the middle of one and the first
 of the other. Every genre has its exact bpm, root note, form (`FAMILY_PLANS`,
 two to four per family, bars per section as chain mode plays them), angle and
 what the second main section adds drawn. A genre with a `plan` (every one
-of the 162: `PLANS` in genres.js and `MORE_PLANS` in genrePlansMore.js, the
+of the 170: `PLANS` in genres.js and `MORE_PLANS` in genrePlansMore.js, the
 same shape, split only for size) also has its drum kit and starting bar (step
 strings), an engine and preset per part, which optional parts exist at all,
 how the bass plays, the progression (which carries its scale, `scale: chords`,
