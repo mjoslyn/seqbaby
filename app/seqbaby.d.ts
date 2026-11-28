@@ -49,6 +49,13 @@ declare global {
       stretchLookAhead?: () => void;
       restoreLookAhead?: () => void;
       /** Launch pattern `slot` on track `i` alone, now (clips.js). */
+      /** The performance cluster without its buttons (perform.js): for a caller driving the engine from a hidden frame. */
+      perform?: {
+        fill: (on: boolean) => void;
+        muteScene: (i: number) => void;
+        pattern: (i: number) => void;
+        tick: () => number;
+      };
       launchClip: (i: number, slot: number) => boolean;
       /** Stop track `i`'s clip: it plays nothing until one is launched. */
       stopClip: (i: number) => void;

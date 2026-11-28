@@ -29,10 +29,11 @@ import {
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
 import { addMasterBus, removeMasterBus, loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
-import { state } from "./state.js";
+import { requestPatternSwitch, state } from "./state.js";
 import { measureSet } from "./measure.js";
 import { captureStart, closeReplay, forkPoint, loadReplay, openFork, pauseReplay, playReplay, replayState, seekReplay, setRecordState, toggleSetRecord } from "./setRecorder.js";
 import { clearCues, cueConfig, setCue, toggleCue } from "./cue.js";
+import { setFill, setMuteScene } from "./perform.js";
 import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 
 export function installAppApi() {
@@ -149,6 +150,18 @@ export function installAppApi() {
     // this studio plays.
     stretchLookAhead,
     restoreLookAhead,
+    // The performance cluster (perform.js), for a caller with no buttons to
+    // press: a game running this engine in a hidden frame and scoring itself
+    // with the song. `fill` holds or lets go of the fill button, `muteScene`
+    // puts a stored scene in force (-1 puts back the mutes from before any),
+    // `pattern` switches the scene as a click on the pattern bar does, now or
+    // at the bar line by the song's switch mode. `tick` is the step count.
+    perform: {
+      fill: setFill,
+      muteScene: setMuteScene,
+      pattern: requestPatternSwitch,
+      tick: () => state.tick,
+    },
     // Clips (clips.js), by track index: a slot on one track, now; and a
     // track's clip stopped. For the headless audition and the verify skill.
     launchClip: (i, slot) => launchClip(state.tracks[i], slot),

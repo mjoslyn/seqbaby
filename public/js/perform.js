@@ -134,6 +134,28 @@ export function tapMuteScene(i) {
   paintMuteScenes();
 }
 
+/**
+ * Put scene `i` in force, or with -1 put back the mutes from before any scene.
+ * Idempotent, where a tap toggles: for a caller that says which scene it
+ * wants rather than pressing a button (window.seqbaby.perform, a game driving
+ * the engine from a hidden frame). An empty slot is left alone.
+ */
+export function setMuteScene(i) {
+  if (i === state._muteScene) return;
+  if (i == null || i < 0) {
+    if (state._muteBefore) applyMutes(state._muteBefore);
+    state._muteScene = -1;
+    state._muteBefore = null;
+  } else {
+    const scene = i < MUTE_SCENE_COUNT ? state.muteScenes[i] : null;
+    if (!scene) return;
+    if (state._muteScene < 0 || !state._muteBefore) state._muteBefore = mutedIds();
+    applyMutes(scene);
+    state._muteScene = i;
+  }
+  paintMuteScenes();
+}
+
 function paintMuteScenes() {
   const box = document.getElementById("mute-scenes");
   if (!box) return;
