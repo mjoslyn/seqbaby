@@ -1211,12 +1211,23 @@ export function buildBassVoice(output) {
 
   const paramFor = (key) => P[PARAM_OF[key]] ?? null;
 
+  // The amp and cab picked, and whether a capture on the rack's nam stage is
+  // standing in for them (namRig.js): then the rig plays as a DI box, and the
+  // picks come back the moment it stops.
+  const rig = { amp: null, cab: null, di: false };
+  const postRig = () => post({
+    type: "set",
+    amp: rig.di ? AMP_IDX.di : (AMP_IDX[rig.amp] ?? 2),
+    cab: rig.di ? CAB_IDX.di : (CAB_IDX[rig.cab] ?? 0),
+  });
+
   return {
+    setRigDi: (on) => { if (rig.di === !!on) return; rig.di = !!on; postRig(); },
     nodes: [{ dispose() { try { node.port.postMessage({ type: "dispose" }); } catch {} try { node.disconnect(); } catch {} } }],
     setGlide: (g) => { glide = Math.max(0, Number(g) || 0); post({ type: "set", glide }); },
     setParam: (key, val) => {
-      if (key === "bsamp")   { post({ type: "set", amp: AMP_IDX[val] ?? 2 }); return; }
-      if (key === "bscab")   { post({ type: "set", cab: CAB_IDX[val] ?? 0 }); return; }
+      if (key === "bsamp")   { rig.amp = val; postRig(); return; }
+      if (key === "bscab")   { rig.cab = val; postRig(); return; }
       if (key === "bspkupt") { post({ type: "set", pkupType: PKUP_IDX[val] ?? 1 }); return; }
       if (key === "bsstrs")  { post({ type: "set", flats: val === "flat" }); return; }
       const p = paramFor(key);

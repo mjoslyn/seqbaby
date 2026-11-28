@@ -22,6 +22,7 @@ import { loadBreathWorklet } from "./breath.js";
 import { loadCrusherWorklet } from "./crusher.js";
 import { loadPrismWorklet } from "./prism.js";
 import { loadRepeatWorklet } from "./repeat.js";
+import { loadNamWorklet } from "./nam.js";
 import { loadReverbWorklet } from "./reverb.js";
 import { loadFilterModelsWorklet } from "./filterModels.js";
 import { loadGuitarWorklet } from "./guitar.js";
@@ -301,7 +302,9 @@ export function loadWorklet() {
   const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
   // The beat repeat / slicer: a buffer and a read head on the transport's clock.
   const repeat = loadRepeatWorklet(state.audioCtx).catch(e => { console.warn("repeat worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, lancet, halo, siege, ladder, oracle, breath, crusher, reverb, analogFilter, prism, repeat]);
+  // A Neural Amp Modeler capture: a network run per sample, the rack's.
+  const nam = loadNamWorklet(state.audioCtx).catch(e => { console.warn("nam worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, lancet, halo, siege, ladder, oracle, breath, crusher, reverb, analogFilter, prism, repeat, nam]);
 }
 
 /**

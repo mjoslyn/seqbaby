@@ -54,7 +54,7 @@ import {
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
   BREATH_NUM_CTLS, BREATH_SEL_CTLS, BREATH_TONE_NAMES, breathTone, breathToneDescription,
 } from "./engineData.js";
-import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams, MASTER_KEYS, MASTER_RANGE, masterIsNeutral, normalizeMaster } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, NAM_CABS, NAM_NORMS, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams, MASTER_KEYS, MASTER_RANGE, masterIsNeutral, normalizeMaster } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, PATTERN_MODES, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -910,10 +910,12 @@ const FX_SELECT = {
   "shaper.mode": ["saturate", "softclip", "clip", "serge", "fold", "wrap"],
   ...Object.fromEntries(Object.entries(PRISM_SELECTS).map(([k, v]) => [`prism.${k}`, v])),
   "repeat.mode": REPEAT_MODES,
+  "nam.norm": NAM_NORMS,
+  "nam.cab": NAM_CABS.filter(c => c !== "file"),
 };
 /**
  * An fx rack stage. `stage` is one of FX_STAGES (gain, vinyl, cassette, fuzz,
- * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, repeat, prism, pan, delay,
+ * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, repeat, prism, nam, pan, delay,
  * reverb, or amp), or a COPY of one, "<stage>#<n>" with n from 2 ("delay#2"),
  * which is made if it is not there; `settings` its controls, or null to take a
  * copy off (with its LFOs and lanes). A stage is on when its level is off its
@@ -938,6 +940,8 @@ export function setFx(song, index, stage, settings = {}) {
     const full = `${s}.${k}`;
     const alias = k === "amount" && !("amount" in d[s]) ? "wet" : k === "wet" && !("wet" in d[s]) ? "amount" : k;
     if (!(alias in d[s])) fail(`unknown ${s} control ${JSON.stringify(k)}; one of ${Object.keys(d[s]).join(", ")}`);
+    if (alias === "ir") fail("a cab impulse response is a .wav someone loads in the studio; pick a built-in cab with cab instead");
+    if (alias === "model") fail("a NAM capture is a .nam file someone loads in the studio (the nam amp row's load button); a song cannot be given one here");
     if (alias === "sync") cur.sync = !!v;
     else if (FX_SELECT[full]) cur[alias] = oneOf(v, full, FX_SELECT[full]);
     else { const [lo, hi] = FX_RANGE[`${s}.${alias}`] || [0, 1]; cur[alias] = num(v, full, lo, hi); }

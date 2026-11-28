@@ -395,3 +395,4 @@
 @media (prefers-reduced-motion: reduce) {
   .wobble, .ticker { animation: none; }
 }
+

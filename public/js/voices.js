@@ -1508,7 +1508,10 @@ export class DrumSynthVoice {
     this.poly = !!e?.poly;
     this.built = buildDrumSynthNode(this.kind, this.output);
     this._applyParams();
+    if (this._rigDi) this.built.setRigDi?.(true);
   }
+  // A guitar or bass played into the rack's nam stage, as a DI (namRig.js).
+  setRigBypass(on) { this._rigDi = !!on; this.built?.setRigDi?.(this._rigDi); }
   setParam(key, val) {
     if (key === "vol") this.output.gain.value = val;
     else {

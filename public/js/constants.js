@@ -17,7 +17,7 @@ import {
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
-import { EQ_KEYS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS, eqFromUnit, eqKeyLabel, eqRange, eqToUnit, splitEqKey } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, NAM_KNOBS, NAM_KNOB_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS, eqFromUnit, eqKeyLabel, eqRange, eqToUnit, splitEqKey } from "./soundDefaults.js";
 import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
@@ -65,7 +65,7 @@ export const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
-  "repeat", "prism", "pan",
+  "repeat", "prism", "nam", "pan",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -78,6 +78,7 @@ export const LFO_KEYS = [
   "delay_time", "delay_fbk",
   ...REPEAT_KNOBS.map(k => `repeat_${k}`),
   ...PRISM_KNOBS.map(k => `prism_${k}`),
+  ...NAM_KNOBS.map(k => `nam_${k}`),
   // FX sub-params modulated via setter-driven LFO (no AudioParam target).
   "vinyl_wow",
   "cassette_flutter", "cassette_sat",
@@ -163,6 +164,8 @@ export const LFO_LABELS = {
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, REPEAT_KNOB_LABELS[k]])),
   prism: "prism wet",
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, PRISM_KNOB_LABELS[k]])),
+  nam: "nam wet",
+  ...Object.fromEntries(NAM_KNOBS.map(k => [`nam_${k}`, NAM_KNOB_LABELS[k]])),
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
   vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
   shaper_preamp: "shaper preamp",
@@ -234,6 +237,8 @@ export const LFO_AMP_SCALE = {
   prism: 1, ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, 1])),
   // So are the repeat stage's, the discrete ones included (they pick from lists).
   repeat: 1, ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, 1])),
+  // And the NAM stage's (nam.js): the mix around it, every knob 0..1.
+  nam: 1, ...Object.fromEntries(NAM_KNOBS.map(k => [`nam_${k}`, 1])),
   // fx sub-params (audio-rate AudioParam targets). Each is the control's own
   // full native-unit span (see applyFuzz / applyChorus / etc. in fxRack.js),
   // so depth 1 is peak-to-peak of the whole knob — same convention as the
@@ -456,13 +461,13 @@ export const FX_STAGE_LEVEL_KEY = {
   gain: "drive",
   vinyl: "amount", cassette: "amount", fuzz: "amount",
   ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
-  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", pan: "pos", delay: "wet", reverb: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", nam: "wet", pan: "pos", delay: "wet", reverb: "wet",
 };
 export const FX_STAGE_LABELS = {
   gain: "gain",
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism", pan: "pan",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism", nam: "nam amp", pan: "pan",
   delay: "delay", reverb: "reverb",
 };
 export const FX_STAGE_KEYS = Object.keys(FX_STAGE_LEVEL_KEY);
@@ -536,6 +541,7 @@ export const FX_LFO_STAGE = {
   pitch: "pitchshift", pitch_semi: "pitchshift",
   repeat: "repeat", ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, "repeat"])),
   prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
+  nam: "nam", ...Object.fromEntries(NAM_KNOBS.map(k => [`nam_${k}`, "nam"])),
   pan: "pan",
   delay: "delay", delay_time: "delay", delay_fbk: "delay",
   verb: "reverb", reverb_decay: "reverb",
@@ -753,6 +759,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx.repeat.${k}`, { label: REPEAT_KNOB_LABELS[k] }])),
   "fx.prism":           { label: "prism wet" },
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx.prism.${k}`, { label: PRISM_KNOB_LABELS[k] }])),
+  "fx.nam":             { label: "nam wet" },
+  ...Object.fromEntries(NAM_KNOBS.map(k => [`fx.nam.${k}`, { label: NAM_KNOB_LABELS[k] }])),
   "fx.delay":           { label: "delay wet" },
   "fx.delay.time":      { label: "delay time" },
   "fx.delay.fbk":       { label: "delay fbk" },
@@ -781,6 +789,7 @@ export const TRACK_FX_LFO_KEYS = new Set([
   "phaser_depth","pitch_semi","reverb_decay",
   "prism", ...PRISM_KNOBS.map(k => `prism_${k}`),
   "repeat", ...REPEAT_KNOBS.map(k => `repeat_${k}`),
+  "nam", ...NAM_KNOBS.map(k => `nam_${k}`),
 ]);
 
 // Engine-aware list of voice/instrument keys that can be automated. Broader

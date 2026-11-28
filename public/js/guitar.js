@@ -178,7 +178,17 @@ const AMPS = [
   // jazz — clean to the point of sterile, dark, and it never breaks up.
   { g: 4,   bias: 0.02, s2: 1,   lo: 80,  mid: 400, hi: 2000, midQ: 0.6,
     vf: 2500, vg: -4,   vq: 0.7, pwr: 0.9,  pres: 2600 },
+  // di — no amp at all: the pickup and the tone pot straight out, as a DI box
+  // takes them, for an amp somewhere else (the rack's nam stage). The numbers
+  // are the clean amp's, only so the stack's coefficients have something to
+  // read; the amp is skipped (AMP_DI).
+  { g: 9,   bias: 0.04, s2: 1.1, lo: 100, mid: 500, hi: 3200, midQ: 0.75,
+    vf: 500,  vg: -3.5, vq: 0.8, pwr: 1.0,  pres: 4200 },
 ];
+const AMP_DI = 5;
+// The DI's level: a hard single note peaks near half scale, as every amp
+// does through its output trim (measured in test/guitar.test.js).
+const DI_GAIN = 0.8;
 
 // ---- the cabs -----------------------------------------------------------
 // hp/lp: what the speaker simply cannot reproduce; peak: the presence bump
@@ -1404,7 +1414,8 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // and took the top off it.
       const est = inG * s2G * pwrG * 0.2;
       const sat = est / Math.sqrt(1 + est * est);
-      const outTrim = Math.max(0.3, Math.min(5, 0.6 / (0.06 + 1.74 * sat)));
+      const di = this.ampModel === AMP_DI;
+      const outTrim = di ? 1 : Math.max(0.3, Math.min(5, 0.6 / (0.06 + 1.74 * sat)));
       // Bloom is cubed. Every engine's morph slider defaults to 0.5, and a rig
       // that howls the moment you load it would be a joke; at 0.5 this is the
       // faint lift a loud amp gives a held note, and the top of the slider is
@@ -1504,7 +1515,8 @@ class GuitarProcessor extends AudioWorkletProcessor {
         // far louder than the real thing's intermodulation). Zero-stuffed up,
         // clipped, filtered back down: the two filters are the only cost.
         let p = 0;
-        for (let os = 0; os < 2; os++) {
+        if (di) p = x * DI_GAIN;
+        else for (let os = 0; os < 2; os++) {
           let u = os === 0 ? x * 2 : 0;
           u = bqRun(this.up[2], bqRun(this.up[1], bqRun(this.up[0], u)));
 
@@ -1640,7 +1652,7 @@ export {
   GUITAR_TONE_NAMES, guitarToneDescription, guitarTone,
 } from "./engineData.js";
 
-const AMP_IDX  = { clean: 0, tweed: 1, brit: 2, hi: 3, jazz: 4 };
+const AMP_IDX  = { clean: 0, tweed: 1, brit: 2, hi: 3, jazz: 4, di: 5 };
 const CAB_IDX  = { "4x12": 0, "2x12": 1, "1x12": 2, "1x8": 3, di: 4 };
 const PKUP_IDX = { single: 0, hum: 1, p90: 2 };
 
@@ -1684,14 +1696,25 @@ export function buildGuitarVoice(output) {
 
   const paramFor = (key) => P[PARAM_OF[key]] ?? null;
 
+  // The amp and cab picked, and whether a capture on the rack's nam stage is
+  // standing in for them (namRig.js): then the rig plays as a DI box, and the
+  // picks come back the moment it stops.
+  const rig = { amp: null, cab: null, di: false };
+  const postRig = () => post({
+    type: "set",
+    amp: rig.di ? AMP_IDX.di : (AMP_IDX[rig.amp] ?? 2),
+    cab: rig.di ? CAB_IDX.di : (CAB_IDX[rig.cab] ?? 0),
+  });
+
   return {
+    setRigDi: (on) => { if (rig.di === !!on) return; rig.di = !!on; postRig(); },
     nodes: [{ dispose() { try { node.port.postMessage({ type: "dispose" }); } catch {} try { node.disconnect(); } catch {} } }],
     setGlide: (g) => { glide = Math.max(0, Number(g) || 0); post({ type: "set", glide }); },
     setParam: (key, val) => {
       // The rig's discrete choices — which amp, which cab, which pickup, which
       // tremolo shape. None of them is a value to ramp.
-      if (key === "gtamp")   { post({ type: "set", amp: AMP_IDX[val] ?? 2 }); return; }
-      if (key === "gtcab")   { post({ type: "set", cab: CAB_IDX[val] ?? 0 }); return; }
+      if (key === "gtamp")   { rig.amp = val; postRig(); return; }
+      if (key === "gtcab")   { rig.cab = val; postRig(); return; }
       if (key === "gtpkupt") { post({ type: "set", pkupType: PKUP_IDX[val] ?? 1 }); return; }
       if (key === "gttremw") { post({ type: "set", tremSquare: val === "square" }); return; }
       const p = paramFor(key);

@@ -263,3 +263,41 @@ export function showSelectDialog({ title, options }) {
   });
 }
 
+
+/**
+ * A list to pick one from: `items` are `{ value, label, sub? }`, with a filter
+ * box once there are more than eight. Resolves the picked value, or null.
+ * `footer` is an optional `{ label, run }` link that runs and closes.
+ */
+export function showListPicker({ title, body = "", items = [], footer = null }) {
+  return new Promise((resolve) => {
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    overlay.innerHTML = `
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${esc(title)}</div>
+        ${body ? `<div class="sq-modal__body">${esc(body)}</div>` : ""}
+        ${items.length > 8 ? `<input class="sq-modal__input sq-list__filter" type="search" placeholder="filter" aria-label="filter" />` : ""}
+        <ul class="sq-list">${items.map((it) => `<li><button type="button" class="sq-list__row" data-v="${esc(it.value)}"><span>${esc(it.label)}</span>${it.sub ? `<span class="sq-list__sub">${esc(it.sub)}</span>` : ""}</button></li>`).join("")}</ul>
+        <div class="sq-modal__actions">
+          ${footer ? `<button type="button" class="sq-btn--ghost sq-list__footer">${esc(footer.label)}</button>` : ""}
+          <button type="button" class="modal-cancel sq-btn--ghost">cancel</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = (v) => { overlay.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    document.addEventListener("keydown", onKey);
+    overlay.querySelectorAll(".sq-list__row").forEach((b) => b.addEventListener("click", () => close(b.dataset.v)));
+    overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
+    overlay.querySelector(".sq-list__footer")?.addEventListener("click", () => { try { footer.run(); } catch {} close(null); });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
+    const filter = overlay.querySelector(".sq-list__filter");
+    filter?.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      overlay.querySelectorAll(".sq-list__row").forEach((b) => { b.parentElement.hidden = !!q && !b.textContent.toLowerCase().includes(q); });
+    });
+    setTimeout(() => (filter || overlay.querySelector(".sq-list__row"))?.focus(), 0);
+  });
+}

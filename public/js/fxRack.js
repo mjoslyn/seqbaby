@@ -3,7 +3,8 @@ import { buildCrusherNode } from "./crusher.js";
 import { buildReverbNode } from "./reverb.js";
 import { buildPrismNode, prismNodeModes } from "./prism.js";
 import { buildRepeatNode, repeatModeIndex } from "./repeat.js";
-import { PRISM_KNOBS, PRISM_SELECTS, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
+import { NAM_MIC, buildNamNode, namCabFor } from "./nam.js";
+import { NAM_CABS, NAM_KNOBS, NAM_NODE_KNOBS, NAM_NORMS, PRISM_KNOBS, PRISM_SELECTS, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
 import { fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
@@ -34,7 +35,7 @@ export const FX_APPLY = {
   amp: "applyAmp", gain: "applyGain", pan: "applyPan", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
   ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
   autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
-  flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism",
+  flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism", nam: "applyNam",
   delay: "applyDelay", reverb: "applyReverb",
 };
 
@@ -93,6 +94,7 @@ export class FXRack {
     // builder writes only what was set) can carry a prism with just its mix.
     config.prism = { ...freshFxConfig().prism, ...(config.prism || {}) };
     config.repeat = { ...freshFxConfig().repeat, ...(config.repeat || {}) };
+    config.nam = { ...freshFxConfig().nam, ...(config.nam || {}) };
 
     config.gain = { ...freshFxConfig().gain, ...(config.gain || {}) };
     config.pan = { ...freshFxConfig().pan, ...(config.pan || {}) };
@@ -384,6 +386,74 @@ export class FXRack {
     this.prismDryBus.connect(this.prismSum);
     this.prismWetBus.connect(this.prismSum);
 
+    // ── nam (nam.js): a Neural Amp Modeler capture ──
+    // The rack's linear crossfade around the node, like prism. With no
+    // capture loaded the node passes its input, so the stage is a wire.
+    this.namDryBus = ctx.createGain();
+    this.namWetBus = ctx.createGain();
+    this.namSum    = ctx.createGain();
+    this.namIn     = ctx.createGain();
+    this.namNode   = buildNamNode(ctx, config.nam);
+    this.namParams = {};
+    this._namModelKey = "";
+    this._namNorm = config.nam.norm !== "off";
+    this.namInfo = null;
+    if (this.namNode) {
+      for (const k of NAM_NODE_KNOBS) this.namParams[k] = this.namNode.parameters.get(k);
+      this.namNode.port.onmessage = (e) => {
+        if (e.data?.type !== "info") return;
+        this.namInfo = e.data;
+        try { window.dispatchEvent(new CustomEvent("seqbaby:naminfo", { detail: { rack: this, info: e.data } })); } catch {}
+      };
+      this.namIn.connect(this.namNode);
+      this.namNode.connect(this.namWetBus);
+    } else {
+      this.namIn.connect(this.namWetBus);
+    }
+    // The cab after the capture: in → convolver → mic (presence bell, then a
+    // lowpass) → blend, beside the uncabbed signal. The convolver is made
+    // when a cab is asked for; with none, the capture goes straight to the
+    // wet bus. The mic and the blend are each a ConstantSource whose offset
+    // is the knob (0..1), wired into the filters and gains so the knob is an
+    // AudioParam an LFO, a lane or a pad can drive: the lowpass corner moves
+    // linearly in Hz from 1.5kHz, the bell ±6dB, the blend a linear crossfade.
+    this.namCab = null;
+    this._namCabKey = "";
+    this.namCabIn = ctx.createGain();
+    this.namMicPres = ctx.createBiquadFilter();
+    this.namMicPres.type = "peaking";
+    this.namMicPres.frequency.value = NAM_MIC.presF;
+    this.namMicPres.Q.value = NAM_MIC.presQ;
+    this.namMicPres.gain.value = -NAM_MIC.presDb / 2;
+    this.namMicLP = ctx.createBiquadFilter();
+    this.namMicLP.type = "lowpass";
+    this.namMicLP.Q.value = 0.6;
+    this.namMicLP.frequency.value = NAM_MIC.lpBase;
+    this.namCabWet = ctx.createGain(); this.namCabWet.gain.value = 0;
+    this.namCabDry = ctx.createGain(); this.namCabDry.gain.value = 1;
+    this.namMicSrc = ctx.createConstantSource();
+    this.namMixSrc = ctx.createConstantSource();
+    const lpSpan = ctx.createGain(); lpSpan.gain.value = NAM_MIC.lpSpan;
+    const presSpan = ctx.createGain(); presSpan.gain.value = NAM_MIC.presDb;
+    const mixInv = ctx.createGain(); mixInv.gain.value = -1;
+    this.namMicSrc.connect(lpSpan); lpSpan.connect(this.namMicLP.frequency);
+    this.namMicSrc.connect(presSpan); presSpan.connect(this.namMicPres.gain);
+    this.namMixSrc.connect(this.namCabWet.gain);
+    this.namMixSrc.connect(mixInv); mixInv.connect(this.namCabDry.gain);
+    this._namCtl = [lpSpan, presSpan, mixInv];
+    this.namMicSrc.offset.value = config.nam.mic;
+    this.namMixSrc.offset.value = config.nam.cabmix;
+    try { this.namMicSrc.start(); this.namMixSrc.start(); } catch {}
+    this.namParams.mic = this.namMicSrc.offset;
+    this.namParams.cabmix = this.namMixSrc.offset;
+    this.namMicPres.connect(this.namMicLP);
+    this.namMicLP.connect(this.namCabWet);
+    this.namCabWet.connect(this.namWetBus);
+    this.namCabIn.connect(this.namCabDry);
+    this.namCabDry.connect(this.namWetBus);
+    this.namDryBus.connect(this.namSum);
+    this.namWetBus.connect(this.namSum);
+
     this.delay = new Tone.FeedbackDelay({
       delayTime: config.delay.time,
       feedback: config.delay.fbk,
@@ -465,6 +535,7 @@ export class FXRack {
       { key: "pitchshift", ins: [toneIn(this.pitchshift)],              out: this.pitchshift },
       { key: "repeat",     ins: [this.repeatDryBus, this.repeatIn],     out: this.repeatSum },
       { key: "prism",      ins: [this.prismDryBus, this.prismIn],       out: this.prismSum },
+      { key: "nam",        ins: [this.namDryBus, this.namIn],           out: this.namSum },
       { key: "pan",        ins: [this.panStage],                        out: this.panStage },
       { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
       { key: "reverb",     ins: [this.reverbIn],                        out: this.reverbCross },
@@ -503,6 +574,7 @@ export class FXRack {
     this.applyCrush(config.crush);
     this.applyRepeat(config.repeat);
     this.applyPrism(config.prism);
+    this.applyNam(config.nam);
   }
 
   // The wet/amount level that decides whether a stage needs to be in the chain.
@@ -998,6 +1070,90 @@ export class FXRack {
     for (const id in this._extra) this._extra[id].clockStop();
     try { this.repeatNode?.port.postMessage({ type: "stop" }); } catch {}
   }
+  /**
+   * Partial configs welcome, as applyPrism. The capture (`model`, packed by
+   * nam.js) goes to the node only when it is a different one: it is tens of
+   * kilobytes and the processor rebuilds and settles the network on it.
+   */
+  applyNam(c = {}) {
+    const d = freshFxConfig().nam;
+    const cfg = this.config.nam || (this.config.nam = {});
+    const fill = {};
+    for (const k of Object.keys(d)) if (cfg[k] === undefined) cfg[k] = fill[k] = d[k];
+    c = { ...fill, ...c };
+    for (const k of NAM_KNOBS) {
+      if (c[k] === undefined || !Number.isFinite(Number(c[k]))) continue;
+      const v = Math.max(0, Math.min(1, Number(c[k])));
+      cfg[k] = v;
+      try { if (this.namParams[k]) this.namParams[k].value = v; } catch {}
+    }
+    if (c.norm !== undefined && NAM_NORMS.includes(c.norm)) cfg.norm = c.norm;
+    const norm = cfg.norm !== "off";
+    if (norm !== this._namNorm) {
+      this._namNorm = norm;
+      try { this.namNode?.port.postMessage({ type: "norm", on: norm }); } catch {}
+    }
+    // a capture is its weights: one without them plays nothing and is dropped
+    if ("model" in c) cfg.model = c.model && typeof c.model === "object" && typeof c.model.w === "string" ? c.model : null;
+    this._namSyncModel();
+    if (c.cab !== undefined && NAM_CABS.includes(c.cab)) cfg.cab = c.cab;
+    if ("ir" in c) cfg.ir = c.ir && typeof c.ir === "object" && typeof c.ir.w === "string" ? c.ir : null;
+    this._namSyncCab();
+    if (c.wet !== undefined && Number.isFinite(Number(c.wet))) {
+      const w = Math.max(0, Math.min(1, Number(c.wet)));
+      cfg.wet = w;
+      this.namWetBus.gain.value = w;
+      this.namDryBus.gain.value = 1 - w;
+    }
+    this._updateStage("nam");
+  }
+  /** The config's capture to the node when it changes. */
+  _namSyncModel() {
+    const cfg = this.config.nam;
+    if (!cfg) return;
+    const r = cfg.model && typeof cfg.model.w === "string" ? cfg.model : null;
+    const key = r ? `${r.name}:${r.n}:${r.w.length}:${r.w.slice(0, 48)}:${r.w.slice(-48)}` : "";
+    if (key !== this._namModelKey) {
+      this._namModelKey = key;
+      if (!r) this.namInfo = null;
+      try { this.namNode?.port.postMessage({ type: "model", model: r }); } catch {}
+    }
+  }
+
+  /**
+   * The cab the config asks for, between the capture and the wet bus: a new
+   * ConvolverNode (normalize off: nam.js scales every response to unit energy)
+   * swapped in under the rack's fade when the stage is playing.
+   */
+  _namSyncCab() {
+    const want = namCabFor(this.config.nam, this.ctx.sampleRate);
+    const key = want?.key ?? "";
+    if (key === this._namCabKey) return;
+    this._namCabKey = key;
+    let next = null;
+    if (want) {
+      try {
+        const h = want.h();
+        if (h?.length) {
+          next = this.ctx.createConvolver();
+          next.normalize = false;
+          const b = this.ctx.createBuffer(1, h.length, this.ctx.sampleRate);
+          b.copyToChannel(h, 0);
+          next.buffer = b;
+        }
+      } catch (e) { console.warn("nam cab", e); next = null; }
+    }
+    const swap = () => {
+      const src = this.namNode || this.namIn;
+      try { src.disconnect(this.namWetBus); } catch {}
+      try { src.disconnect(this.namCabIn); } catch {}
+      if (this.namCab) { try { this.namCabIn.disconnect(this.namCab); } catch {} try { this.namCab.disconnect(); } catch {} }
+      this.namCab = next;
+      if (next) { src.connect(this.namCabIn); this.namCabIn.connect(next); next.connect(this.namMicPres); }
+      else src.connect(this.namWetBus);
+    };
+    if (this._active?.nam && this.softSwitch && this.switchGain) this.softSwitch(swap); else swap();
+  }
   /** Partial configs welcome: the automation lanes send one knob at a time. */
   applyPrism(c = {}) {
     // A config written sparsely (the song builder writes only what was set,
@@ -1218,6 +1374,15 @@ export class FXRack {
     try { this.prismDryBus.disconnect(); } catch {}
     try { this.prismWetBus.disconnect(); } catch {}
     try { this.prismSum.disconnect(); } catch {}
+    try { this.namIn.disconnect(); } catch {}
+    try { this.namNode?.port.postMessage({ type: "dispose" }); } catch {}
+    try { this.namNode?.disconnect(); } catch {}
+    try { this.namDryBus.disconnect(); } catch {}
+    try { this.namWetBus.disconnect(); } catch {}
+    try { this.namSum.disconnect(); } catch {}
+    try { this.namCab?.disconnect(); } catch {}
+    for (const n of [this.namCabIn, this.namMicPres, this.namMicLP, this.namCabWet, this.namCabDry, ...(this._namCtl || [])]) { try { n.disconnect(); } catch {} }
+    for (const s of [this.namMicSrc, this.namMixSrc]) { try { s.stop(); s.disconnect(); } catch {} }
   }
 }
 

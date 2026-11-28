@@ -157,6 +157,12 @@ env / fx / eq / comp / mod / automation per track.
 - `repeat.js` — the repeat: a beat repeat and a live slicer as one
   AudioWorklet rack stage, clocked by the transport's steps. Same file shape
   again. See the repeat section below.
+- `namRig.js` — a capture on the nam stage playing a guitar's or bass's
+  amp: their own amp and cab bypassed and greyed while it is on.
+- `nam.js` / `namKernel.js` — the `nam amp` rack stage: a Neural Amp
+  Modeler capture (.nam) loaded from disk and run per sample in an
+  AudioWorklet, the WaveNet's loops in WebAssembly SIMD (`namKernel.js`,
+  generated from `scripts/nam-kernel.wat`). See the NAM section below.
 - `filterModels.js` — the filter control's eight analog-modeled characters
   (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
   effect standing in for the plain BiquadFilterNode when `t.filter.type`
@@ -457,7 +463,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   song previews, a compose turn's change summary, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the breath, the lancet, the halo, the prism, the repeat,
-                       #   the ladder, the oracle, the arrangement, the piano view's notes,
+                       #   the ladder, the oracle, the nam stage, the arrangement, the piano view's notes,
                        #   the data layer's access rules, auth, the Supabase importer,
                        #   the compose turn's polish pass and hearing notes)
 npm run compose:eval   # a fixed set of compose turns, run and scored (real tokens; see the compose section)
@@ -532,7 +538,7 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **gain → vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → repeat → prism → pan → delay → reverb**. `defaultFxConfig()` keys match. That is
+  pitch shift → repeat → prism → nam → pan → delay → reverb**. `defaultFxConfig()` keys match. That is
   the order of a song with no `fxConfig.order`; see the fx chain section below
   for a track's own order and a stage added more than once.
 - **gain and pan are stages like any other** (one GainNode, one
@@ -844,6 +850,107 @@ slice    cut the track into GRID slices as it plays; at each, with CHANCE,
   panel writes `t.fxConfig`, which IS `rack.config`, before calling
   `applyRepeat` / `applyPrism`, so comparing the two never saw a change. That
   is how prism's character selects reached the node only at build time.
+
+## NAM (`nam.js`) — a Neural Amp Modeler capture as a rack stage
+
+The `nam amp` row's `load .nam` reads a capture (an amp or pedal someone
+trained with NAM, their own or one shared with them) and runs it on the track.
+
+```
+in ─ input gain ─┬─▶ MODEL ─▶ normalize ─▶ gate ─▶ bass / mid / treble ─▶ output ─▶ CAB ─▶ wet
+                 └─▶ gate detector ───────────┘                     (ConvolverNode)
+```
+
+- **No captures ship**: they belong to whoever trained them. What is kept is
+  `fxConfig.nam.model = {name, arch, cfg, sr, loud, n, w}`, `w` the weights
+  as base64 float32 (~75KB for a standard model; the JSON is ~400KB), so
+  save, undo, p-lock, a patch and a jam carry it. Strudel export skips it
+  (a run leaves it alone), the song builder refuses to set one, and the MCP
+  `export_song` leaves the weights out.
+- **What it reads** (`packNamModel`, every weight count checked): every
+  WaveNet NAM writes, A1 and A2 (NAM's generic WaveNet: a kernel size,
+  activation and gating mode (none / gated / blended) per layer, bottleneck,
+  grouped convolutions, layer 1x1 and head 1x1 on or off, FiLM at any of its
+  eight places, a head rechannel with its own kernel and dilation, a
+  post-stack head, a condition model in front), LSTM, Linear, and a
+  SlimmableContainer's largest submodel (how A2 ships: lite and
+  full). Mono in and out only. Weight order is NeuralAmpModelerCore's
+  (grouped weights laid out dense, block-diagonal); "Tanh" is its fast tanh,
+  as the plugin runs it, and a gate's Sigmoid the exact one, as the core
+  runs it. The spec is `{v: 2, arrays, head, cond}` (`normWN` reads a song
+  saved with the A1 spec the same; `wnCount` counts its weights; both are
+  written into the processor source with `String(fn)`, so one copy). One
+  builder (`buildWaveNet`) runs A1 and A2 on the kernel's memory, or on a
+  plain Float32Array with the same loops in JS (`jsKernel`) where SIMD is
+  missing.
+- **The WaveNet runs in WebAssembly SIMD inside the worklet** (not a Worker:
+  a thread hop per block would add latency). `scripts/nam-kernel.wat`, built
+  into `namKernel.js` by `scripts/make-nam-kernel.mjs` (needs wabt, only to
+  rebuild): matrix-times-block accumulate, bias set, fast tanh, add. JS keeps
+  the orchestration and the less common activations. Measured in Node, a
+  standard model is ~7% of a core at 48kHz against ~140% in plain JS, which
+  stays as the fallback where SIMD is missing (the row says so).
+- **Run at the model's rate**: at another context rate the input is
+  resampled to it and back (Catmull-Rom, `RateBridge`), and the row says so.
+- Prewarmed on load (receptive field, or 0.5s for an LSTM), swapped under a
+  10ms fade, normalized to -18dB by the file's loudness (`norm`), gated by
+  the input, then a three-band tone stack and the output.
+- Knobs `input output gate bass mid treble mic cabmix` (`NAM_KNOBS`), each a 0..1
+  AudioParam: `fx-nam-<k>` / `nam_<k>` / `fx.nam.<k>`; `nam` / `fx.nam` the
+  wet. A reset keeps the capture.
+- **The cab** (`cab`, `NAM_CABS`): off (the default, so a full-rig capture
+  is left alone), eight built-in cabs, or `file`, an impulse response .wav
+  loaded with the row's `load IR` (`packNamIR`: mono, silent tail cut, at
+  most 0.5s, kept as base64 float32 in `fxConfig.nam.ir`). The built-in
+  cabs' impulse responses are made in JS from the guitar's and bass's own
+  cab filters (`namCabImpulse`, the same numbers as guitar.js / bass.js at
+  their default mic). Every response is scaled to unity power over 80Hz..6kHz
+  (`unitEnergy`), so a cab changes the tone and not the level; unit energy
+  measured 4-5dB louder on a real capture. A loaded IR at another rate is
+  resampled to the context's (`namIRAt`, linear). It is a native
+  ConvolverNode between the worklet and the wet bus, a new one swapped in
+  under the rack's fade on a change (`_namSyncCab`). The song builder takes
+  a built-in cab, not `file` or an IR.
+- **Mic position and blend** (`mic`, `cabmix`, shown only while a cab is on):
+  after the convolver, a presence bell at 3.2kHz (±6dB) and a lowpass whose
+  corner runs linearly from 1.5kHz to 28.5kHz (`namMicCurve`), so the middle
+  of the knob leaves the cab as it is, down is the cone's edge (darker), up
+  its centre (brighter); then the cab crossfaded with the uncabbed capture.
+  Each knob is a ConstantSource's offset wired into those filters and gains,
+  so both are AudioParams in `namParams` like the worklet's knobs and take an
+  LFO, a lane and a pad (`NAM_KNOBS` has all eight, `NAM_NODE_KNOBS` the six
+  on the worklet). They work on built-in cabs and loaded IRs alike.
+- **A capture and an IR are files a person loads**, kept whole in the song,
+  so anyone opening it hears them. `applyNam` keeps only a model or IR that
+  carries its weights (`w`); one without is dropped and the stage stays
+  empty.
+- **A capture takes the instrument's own amp out by itself** (`namRig.js`):
+  while a guitar or bass track has a nam stage (or a copy) with a capture
+  and wet above zero (`namOwnsRig`), the voice plays as a DI
+  (`setRigBypass` on DrumSynthVoice, the builders' `setRigDi`: amp di and
+  cab di posted to the worklet, re-applied on a rebuild) and the panel's
+  amp and cab rows (`data-rig`) are greyed and disabled with a line saying
+  why. `t.params` keeps the picked amp and cab, so wet at zero or the
+  capture unloaded puts them back. `syncNamRig` runs from
+  `refreshPanelBadges` (panel edits, loads, p-lock) and `routeTrackOutput`
+  (every rebuild). The guitar's `di` amp had never reached its worklet
+  (`AMP_IDX` lacked it and fell back to brit); it does now. Both rigs keep
+  `di` in their own amp / cab selects too.
+- `test/nam.test.js` holds the builders to two naive references: the A1 one
+  (`test/namRef.mjs`, WaveNet tanh / gated / relu / standard-sized, LSTM,
+  Linear) and a line-by-line transliteration of NAM's generic WaveNet
+  (`test/namRefA2.mjs`): NAM's released A2 shape (and its slimmable
+  container), and one model with every A2 feature at once, plain JS and
+  SIMD alike. The everything-model is scaled so its output follows its
+  input (asserted), since a model that only rode a DC level passed with its
+  FiLM shifts, blend and head dilation broken. Renders the processor in
+  Node. NAM's own example models (A2.nam, wavenet_a2_feature_test.nam,
+  wavenet_condition_dsp.nam, slimmable_wavenet.nam, the LSTM) and the
+  suite's own A1, A2 and every-feature models were checked by hand against
+  NeuralAmpModelerCore's C++ itself (built with a small harness, fast tanh
+  on as the plugin has it): every one within float32 rounding, under 3e-6
+  of the peak, plain JS and SIMD. Not in the suite: it needs the C++ built.
+  Checked against NAM's own example models by hand, not in the suite.
 
 ## Analog filter models (`filterModels.js`) — eight characters on the filter control
 
@@ -1510,7 +1617,10 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   "woman tone" is, which a plain lowpass never gave.
 - **Amp**: asymmetric first stage → tone stack → second stage → presence in the
   power-amp loop → soft clip into a sagging supply. Five models (clean / tweed /
-  brit / hi-gain / jazz) differing in gain, bias, stack frequencies and voicing.
+  brit / hi-gain / jazz) differing in gain, bias, stack frequencies and voicing,
+  plus `di`, no amp at all (`AMP_DI`: the pickup and tone pot straight out at
+  a fixed level, `DI_GAIN`, for a capture on the rack's nam stage; with the
+  `di` cab it is a DI box).
   Drive is **exponential** (`0.45·g^drive²·(0.55 + 0.45·drive²)`) because a
   gain pot is; the bottom of the slider puts a single hard note about 12dB
   under the first stage's knee, so drive 0 is clean on every amp (it was
@@ -6951,7 +7061,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 103 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 106 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

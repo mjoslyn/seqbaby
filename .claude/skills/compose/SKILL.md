@@ -357,7 +357,7 @@ one.
 - Filter: cutoff 1 is open. A bass closes to 0.3..0.5 with `env` 0.3..0.6 and
   a short decay for a plucked shape; a pad opens slowly with `attack`.
 - Fx go in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush,
-  autowah, chorus, phaser, flanger, pitchshift, repeat, prism, delay, reverb. A stage is on
+  autowah, chorus, phaser, flanger, pitchshift, repeat, prism, nam, delay, reverb. A stage is on
   when its wet (or amount) is above 0. Delay: `sync: true` with `div` 0.75
   for a dotted eighth, 0.5 an eighth, 0.333 a triplet; `fbk` 0.3..0.5.
   Reverb: `decay` 1..2 s tight, 4..8 s a wash. Crush: `bits` 6..8 and
@@ -389,6 +389,35 @@ one.
   steps, gate 1 .. 32 steps). `wet` 1 is an insert, the repeat replacing the
   beat; a lane on `fx.repeat.chance` at 0 then 1 on the last bar is a fill.
   Put it on the drums or a bus, before the delay and reverb (it is).
+- `nam` (the `nam amp` row) plays a Neural Amp Modeler capture: a real amp
+  or pedal someone trained, loaded by the PERSON from a .nam file (`load
+  .nam`); the cab's `IR file` is an impulse response they load (`load IR`).
+  You cannot load either, and `set_fx` refuses a `model` or an `ir`. When an
+  ask wants a real amp or pedal (a Plexi, a Big Muff, a Dumble), say in your
+  reply that they can load a capture of one on the track's `nam amp` row, and
+  set the rest up for it: the stage on with the cab you would want. With no
+  capture it
+  passes its input, so its knobs do nothing. Look for one: a track whose
+  `fxConfig.nam.model` has a name (`export_song` shows it, weights left out)
+  carries a capture. Leave it on and leave `wet` where it is. Shape around it:
+  `input` (0.5 is 0dB, up to +24dB) is how hard the part hits the amp, so
+  more input is more drive, as with a guitar's volume knob. `output` sets the
+  level after it, `gate` (0 off, 0.2..0.4 for a high-gain capture) stops the
+  hiss between notes, and `bass` / `mid` / `treble` are a tone stack after it
+  (0.5 flat, ±12dB). A guitar or bass under a loaded capture plays as a DI by
+  itself: its own amp and cab are bypassed (and greyed on its panel) while the
+  stage has a capture and wet above zero, so leave `gtamp` / `gtcab` and
+  `bsamp` / `bscab` as they are; they come back when the capture goes.
+- The `nam` stage's cab works with or without a capture: `cab` "4x12",
+  "2x12", "1x12", "1x8" (guitar speakers) or "b8x10", "b4x10", "b1x15",
+  "b2x12" (bass), `mic` (0.5 as is, lower the cone's edge and darker, higher
+  its centre and brighter), and `cabmix` (1 all cab, less blends the uncabbed
+  sound back in). A capture of an amp alone wants a cab, or it sounds fizzy;
+  a full-rig capture already has one, so leave `cab` "off". With no capture,
+  `wet` 1 and a cab is a speaker on anything: a synth lead through a 1x12 at
+  `mic` 0.3 loses its digital top, and a bass through "b1x15" sounds like a
+  bass amp in a room. If the person loaded an impulse response, `cab` is
+  "file". Leave it.
 - Sidechain: `set_comp` on the bass with `source` the kick's index,
   threshold -30, ratio 6, release 0.15: the pumping.
 - A shared space is a SEND, not an output: add one `bus` track with its reverb

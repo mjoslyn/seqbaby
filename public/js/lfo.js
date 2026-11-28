@@ -283,6 +283,9 @@ export function getModTarget(t, key) {
   if (key === "repeat") return rack.repeatWetBus?.gain ?? null;
   if (key.startsWith("repeat_")) return rack.repeatParams?.[after(key, "repeat_")] ?? null;
   if (key.startsWith("prism_")) return rack.prismParams?.[after(key, "prism_")] ?? null;
+  // The NAM stage likewise (nam.js).
+  if (key === "nam") return rack.namWetBus?.gain ?? null;
+  if (key.startsWith("nam_")) return rack.namParams?.[after(key, "nam_")] ?? null;
   // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
   switch (key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;

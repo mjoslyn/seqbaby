@@ -14,8 +14,9 @@ import { ORACLE_MOD_KEYS, ORACLE_MOD_LABELS } from "./oracle.js";
 import { BREATH_MOD_KEYS, BREATH_MOD_LABELS } from "./engineData.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
-import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
+import { NAM_KNOBS, NAM_KNOB_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
 import { state } from "./state.js";
+import { syncNamRig } from "./namRig.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -156,6 +157,8 @@ for (const [cls, lfo, auto] of [
   ...REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, `repeat_${k}`, `fx.repeat.${k}`]),
   ["fx-prism-wet",        "prism",            "fx.prism"],
   ...PRISM_KNOBS.map(k => [`fx-prism-${k}`, `prism_${k}`, `fx.prism.${k}`]),
+  ["fx-nam-wet",          "nam",              "fx.nam"],
+  ...NAM_KNOBS.map(k => [`fx-nam-${k}`, `nam_${k}`, `fx.nam.${k}`]),
 ]) def(cls, lfo, auto);
 
 // Where the right-click menu is offered at all. Controls listed above open it
@@ -327,6 +330,8 @@ export const CONTROL_LABELS = {
   "fx-prism-wet": "prism wet",
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, REPEAT_KNOB_LABELS[k]])),
   "fx-repeat-wet": "repeat wet", "fx-repeat-mode": "repeat mode",
+  ...Object.fromEntries(NAM_KNOBS.map(k => [`fx-nam-${k}`, NAM_KNOB_LABELS[k]])),
+  "fx-nam-wet": "nam wet", "fx-nam-norm": "nam normalize",
   "fx-prism-charmode": "prism character", "fx-prism-movemode": "prism movement",
   "fx-prism-diffmode": "prism diffusion", "fx-prism-texmode": "prism texture",
   "p-gplay": "grain play mode", "p-gloop": "grain loop mode",
@@ -455,6 +460,15 @@ export const PARAM_DESCRIPTIONS = {
   "fx.repeat.vary":      "repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards",
   "fx.repeat.pitch":     "repeat: how far each repeat drops in pitch. slice: how far swapped slices are transposed down",
   "fx.repeat.decay":     "repeat: how much quieter each repeat gets. slice: how short each swapped slice is chopped",
+  "fx.nam":              "dry/wet around the NAM capture: all the way is the amp alone",
+  "fx.nam.input":        "how hard the signal hits the capture, \u00b124dB: more is more drive, as on the amp",
+  "fx.nam.output":       "the level after the capture, \u00b124dB",
+  "fx.nam.gate":         "a noise gate keyed on the input: off at the bottom, then a threshold from -100 to -20dB",
+  "fx.nam.bass":         "a low shelf after the capture, \u00b112dB",
+  "fx.nam.mid":          "a mid bell after the capture, \u00b112dB",
+  "fx.nam.treble":       "a high shelf after the capture, \u00b112dB",
+  "fx.nam.mic":          "where the mic sits on the cab's speaker: the middle as it is, down the cone's edge (darker), up its centre (brighter)",
+  "fx.nam.cabmix":       "how much of the cab: all the way the cab alone, less blends the capture without it back in",
   "fx.prism":            "dry/wet around the whole prism console",
   "fx.prism.char":       "how much of the character module: drive, sweeten, fuzz, howl or swell",
   "fx.prism.move":       "how much of the movement module: doubler, vibrato, phaser or tremolo depth, or the pitch module's interval",
@@ -778,6 +792,7 @@ const PANEL_BADGES = [
  */
 export function refreshPanelBadges(t) {
   if (!t?.el) return;
+  syncNamRig(t);
   let total = 0;
   for (const b of PANEL_BADGES) {
     let on;

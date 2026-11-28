@@ -450,7 +450,7 @@ export const TOOLS = [
     inputSchema: {},
     // The audio is megabytes of base64: nothing a reader of this result acts
     // on. (The stdio server's own export_song writes the whole file.)
-    handler: (ctx) => { const o = JSON.parse(sb.toJSON(ctx.song)); for (const t of o.tracks || []) if (t.uploadAudio) t.uploadAudio = "(audio left out)"; return o; },
+    handler: (ctx) => { const o = JSON.parse(sb.toJSON(ctx.song)); for (const t of o.tracks || []) if (t.uploadAudio) t.uploadAudio = "(audio left out)"; leaveOutCaptures(o); return o; },
   },
   {
     name: "load_song", title: "Load song",
@@ -461,3 +461,10 @@ export const TOOLS = [
 ];
 
 export const TOOLS_BY_NAME = new Map(TOOLS.map(t => [t.name, t]));
+
+/** A NAM capture's weights (fxConfig.nam.model.w, anywhere in a song) are tens of kilobytes of base64: left out of what the model reads. */
+function leaveOutCaptures(o) {
+  if (!o || typeof o !== "object") return;
+  if (typeof o.w === "string" && ((typeof o.arch === "string" && o.cfg) || o.ir === true)) { o.w = "(capture weights left out)"; return; }
+  for (const v of Object.values(o)) leaveOutCaptures(v);
+}

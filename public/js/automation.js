@@ -245,6 +245,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     ramp(rack.repeatParams?.[which], vv, vn);
     return;
   }
+  if (key.startsWith("fx.nam.")) {
+    const which = after(key, "fx.nam.");
+    if (rack.config.nam) rack.config.nam[which] = vv;
+    ramp(rack.namParams?.[which], vv, vn);
+    return;
+  }
   if (key.startsWith("fx.prism.")) {
     const which = after(key, "fx.prism.");
     if (rack.config.prism) rack.config.prism[which] = vv;

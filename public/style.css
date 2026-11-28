@@ -1690,6 +1690,19 @@ main {
 .sq-fx__row[data-fx="flanger"] .sq-fx__title { color: #7adfc8; }
 .sq-fx__row[data-fx="pitchshift"] .sq-fx__title { color: #ffaad5; }
 .sq-fx__row[data-fx="repeat"] .sq-fx__title { color: #ff9f6b; }
+.sq-fx__row[data-fx="nam"] .sq-fx__title { color: #f2c14e; }
+.sq-nam__file { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; flex: 1 1 100%; }
+.sq-nam__name { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sq-nam__name.is-error { color: #ff7a7a; white-space: normal; }
+.sq-nam__load, .sq-nam__clear, .sq-nam__irload { flex: 0 0 auto; }
+.sq-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: min(52vh, 420px); overflow: auto; }
+.sq-list__row { width: 100%; display: flex; justify-content: space-between; gap: 10px; text-align: left; padding: 7px 8px; background: none; border: 0; border-bottom: 1px solid var(--line, #2a2a2a); color: inherit; font: inherit; cursor: pointer; }
+.sq-list__row:hover, .sq-list__row:focus-visible { background: var(--bg-2, #1d1d1d); }
+.sq-list__sub { color: var(--fg-dim); flex: 0 0 auto; }
+.sq-list__filter { width: 100%; box-sizing: border-box; margin-top: 8px; }
+.sq-nam__irname { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sq-fx__row[data-fx="nam"]:not(.is-ir) .sq-nam__irfile { display: none; }
+.sq-fx__row[data-fx="nam"]:not(.has-cab) .sq-nam__cabctl { display: none; }
 .sq-fx__row[data-fx="delay"] .sq-fx__title { color: var(--accent-2); }
 .sq-fx__row[data-fx="reverb"] .sq-fx__title { color: var(--accent); }
 .sq-fx__ctl {
@@ -5528,3 +5541,8 @@ body.view-mix #add-bus { display: none; }
 .sq-samp__find svg { display: block; }
 .sq-sampler__finder-own { display: grid; gap: 4px; max-height: 34vh; overflow: auto; }
 .sq-sampler__finder .sq-sampler__find-list { max-height: 34vh; overflow: auto; }
+
+/* a guitar's or bass's amp and cab while the rack's nam stage plays the amp (namRig.js) */
+[data-rig].is-nam-owned { opacity: 0.4; pointer-events: none; }
+[data-rig="amp"].is-nam-owned::after { content: "played by the nam amp stage"; flex-basis: 100%; font-size: 11px; color: var(--accent); opacity: 1; }
+

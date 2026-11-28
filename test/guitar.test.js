@@ -19,7 +19,7 @@ import { GUITAR_TONE_NAMES, guitarTone } from "../public/js/engineData.js";
 
 const SR = 48000;
 const Q = 128;
-const AMP = { clean: 0, tweed: 1, brit: 2, hi: 3, jazz: 4 };
+const AMP = { clean: 0, tweed: 1, brit: 2, hi: 3, jazz: 4, di: 5 };
 const CAB = { "4x12": 0, "2x12": 1, "1x12": 2, "1x8": 3, di: 4 };
 const PK = { single: 0, hum: 1, p90: 2 };
 const SLIDER = { harm: "drive", timb: "tone", morph: "bloom", decay: "sustain" };
@@ -504,4 +504,14 @@ test("finger noise: a squeak when the hand jumps on the wound strings, a thump a
   assert.equal(diffRms(l1, l0, 0, sec(0.5)), 0, "nothing while the note is held");
   const r = diffRms(l1, l0, sec(0.5), sec(0.56)), n = rms(l0, sec(0.2), sec(0.45));
   assert.ok(db(r) > db(n) - 35 && db(r) < db(n) - 8, `release ${(db(r) - db(n)).toFixed(1)}dB under the note`);
+});
+
+test("the di amp is no amp: the pickup straight out, at an amp's level, and no drive", () => {
+  const peakOf = (p) => { const g = rig({ ...p, cab: "di" }); note(g, 52, 0, 0.5, 1); return peak(render(g, 0.6)); };
+  const di = peakOf({ amp: "di", drive: 0 });
+  const clean = peakOf({ amp: "clean", drive: 0 });
+  assert.ok(di > 0.3 && di < 0.85, `di peaks at ${di.toFixed(3)}`);
+  assert.ok(Math.abs(db(di) - db(clean)) < 6, `di ${db(di).toFixed(1)}dB, clean ${db(clean).toFixed(1)}dB`);
+  // the drive knob is the amp's; with no amp it does nothing
+  assert.ok(Math.abs(db(peakOf({ amp: "di", drive: 1 })) - db(di)) < 2, "drive does nothing with no amp (the pick varies a little note to note)");
 });

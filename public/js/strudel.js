@@ -1867,6 +1867,8 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
     const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk", "pan.pos"]);
     if (native) {
       for (const [stage, d] of Object.entries(DFX)) for (const [key, dv] of Object.entries(d)) {
+        // a NAM capture is a file, not a setting: a run leaves it where it is
+        if (key === "model" || key === "ir") continue;
         const v = fxv(stage, key);
         if (namedFx.has(`${stage}.${key}`) && (stage !== "reverb" || fxv("reverb", "wet") > 0) && (stage !== "delay" || fxv("delay", "wet") > 0)) continue;
         if (typeof dv === "number" ? Math.abs(v - dv) > 1e-6 : v !== dv) ctl.push(["fx", [`${stage}.${key}`, typeof v === "number" ? round3(v) : v]]);
@@ -1875,6 +1877,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       for (const id of fxInstanceIds(fx)) {
         const st = fxStageOf(id), d = DFX[st], lk = FX_STAGE_LEVEL_KEY[st];
         for (const [key, dv] of Object.entries(d)) {
+          if (key === "model" || key === "ir") continue;
           const v = fx[id][key] ?? dv;
           if (key === lk || (typeof dv === "number" ? Math.abs(v - dv) > 1e-6 : v !== dv)) ctl.push(["fx", [`${id}.${key}`, typeof v === "number" ? round3(v) : v]]);
         }

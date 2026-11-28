@@ -30,6 +30,8 @@ import { loadBundledSample, loadGranularTexture, openGranularSourceModal, openSa
 import { defaultFxConfig, driveGainLabel, panLabel } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
 import { PRISM_KNOBS, PRISM_SELECTS, prismRateLabel, prismTimeLabel } from "./prism.js";
+import { NAM_KNOBS, NamError, namCabMixLabel, namGainLabel, namGateLabel, namMicLabel, namModelLabel, namToneLabel, packNamIR, packNamModel } from "./nam.js";
+import { NAM_CABS, NAM_NORMS } from "./soundDefaults.js";
 import {
   REPEAT_KNOBS, REPEAT_MODES, repeatGateLabel, repeatGridLabel, repeatIntervalLabel, repeatOffsetLabel,
   repeatPercentLabel, repeatPitchLabel,
@@ -41,6 +43,7 @@ import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, EQ_KEYS, eqValue } from "./sou
 import { mountEqDraw } from "./eqDraw.js";
 import { state, trackSlot } from "./state.js";
 import { launchClip } from "./clips.js";
+import { markExternalEdit } from "./history.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openInstrumentAsModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
@@ -1834,6 +1837,14 @@ export function applyFxToTrack(t, fx) {
     readUnit("prism", ["wet", ...PRISM_KNOBS]);
     for (const k of Object.keys(PRISM_SELECTS)) if (PRISM_SELECTS[k].includes(fx.prism[k])) cfg.prism[k] = fx.prism[k];
   }
+  if (fx.nam && typeof fx.nam === "object") {
+    cfg.nam = { ...defaultFxConfig().nam, ...(cfg.nam || {}) };
+    readUnit("nam", ["wet", ...NAM_KNOBS]);
+    if (NAM_NORMS.includes(fx.nam.norm)) cfg.nam.norm = fx.nam.norm;
+    if (NAM_CABS.includes(fx.nam.cab)) cfg.nam.cab = fx.nam.cab;
+    if ("ir" in fx.nam) cfg.nam.ir = fx.nam.ir && typeof fx.nam.ir === "object" ? fx.nam.ir : null;
+    if ("model" in fx.nam) cfg.nam.model = fx.nam.model && typeof fx.nam.model === "object" ? fx.nam.model : null;
+  }
   if (fx.crush && typeof fx.crush === "object") {
     if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
     const bits = Number(fx.crush.bits); if (Number.isFinite(bits)) cfg.crush.bits = Math.max(1, Math.min(16, Math.round(bits)));
@@ -1857,6 +1868,7 @@ export function applyFxToTrack(t, fx) {
     t.fxRack.applyPitchShift(cfg.pitchshift);
     if (cfg.repeat) t.fxRack.applyRepeat(cfg.repeat);
     if (cfg.prism) t.fxRack.applyPrism(cfg.prism);
+    if (cfg.nam) t.fxRack.applyNam(cfg.nam);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
   }
@@ -1934,7 +1946,10 @@ export function refreshFxPanelUI(t) {
   for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_SELECTS)]) set(`.fx-prism-${k}`, cfg.prism[k]);
   cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
   for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, cfg.repeat[k]);
+  cfg.nam = { ...defaultFxConfig().nam, ...(cfg.nam || {}) };
+  for (const k of ["wet", "norm", "cab", ...NAM_KNOBS]) set(`.fx-nam-${k}`, cfg.nam[k]);
   syncFxRows(t);
+  paintNamRows();
 }
 
 export function wireFxPanel(t, panel) {
@@ -1956,6 +1971,7 @@ export function wireFxPanel(t, panel) {
   if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
   fc.prism = { ...defaultFxConfig().prism, ...(fc.prism || {}) };
   fc.repeat = { ...defaultFxConfig().repeat, ...(fc.repeat || {}) };
+  fc.nam = { ...defaultFxConfig().nam, ...(fc.nam || {}) };
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   // Portamento. Not an fx-rack effect (it lives on the voice, as t.glide), but it
   // belongs with the per-track sound controls rather than buried in the mod panel.
@@ -2107,6 +2123,13 @@ export function wireFxPanel(t, panel) {
     t.fxRack?.applyRepeat(fc.repeat);
   };
 
+  const applyNam = () => {
+    if (!fc.nam) fc.nam = { ...defaultFxConfig().nam };
+    for (const k of ["wet", ...NAM_KNOBS]) { const el = q(`.fx-nam-${k}`); if (el) fc.nam[k] = Number(el.value); }
+    for (const k of ["norm", "cab"]) { const el = q(`.fx-nam-${k}`); if (el) fc.nam[k] = el.value; }
+    t.fxRack?.applyNam(fc.nam);
+  };
+
   const applyCrush = () => {
     const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet"); const r = q(".fx-crush-rate");
     if (b) fc.crush.bits = Number(b.value);
@@ -2151,6 +2174,10 @@ export function wireFxPanel(t, panel) {
   for (const k of Object.keys(PRISM_SELECTS)) q(`.fx-prism-${k}`)?.addEventListener("change", applyPrism);
   for (const k of ["wet", ...REPEAT_KNOBS]) q(`.fx-repeat-${k}`)?.addEventListener("input", applyRepeat);
   q(".fx-repeat-mode")?.addEventListener("change", applyRepeat);
+  for (const k of ["wet", ...NAM_KNOBS]) q(`.fx-nam-${k}`)?.addEventListener("input", applyNam);
+  q(".fx-nam-norm")?.addEventListener("change", applyNam);
+  q(".fx-nam-cab")?.addEventListener("change", applyNam);
+  { const row = panel.querySelector('.sq-fx__row[data-fx="nam"]'); if (row) wireNamRow(t, row, "nam"); }
 
   // Double-click an effect's name to put that effect back to its defaults. The
   // panel has a lot of knobs, and undo walks back one at a time — getting to a
@@ -2159,7 +2186,7 @@ export function wireFxPanel(t, panel) {
     amp: applyAmp, gain: applyGain, pan: applyPan, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
     ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,
     autowah: applyAutoWah, chorus: applyChorus, phaser: applyPhaser,
-    flanger: applyFlanger, pitchshift: applyPitchShift, repeat: applyRepeat, prism: applyPrism,
+    flanger: applyFlanger, pitchshift: applyPitchShift, repeat: applyRepeat, prism: applyPrism, nam: applyNam,
     delay: applyDelay, reverb: applyReverb,
   };
   const defaults = defaultFxConfig();
@@ -2191,7 +2218,8 @@ export function wireFxPanel(t, panel) {
       }
       const apply = RESET[stage];
       if (!apply || !defaults[stage]) return;
-      fc[stage] = { ...defaults[stage] };
+      // A reset puts the knobs back; a loaded capture stays loaded.
+      fc[stage] = stage === "nam" ? { ...defaults.nam, model: fc.nam?.model ?? null, ir: fc.nam?.ir ?? null } : { ...defaults[stage] };
       refreshFxPanelUI(t);                     // writes every control from the config
       apply();                                 // …then re-read them into the rack
     });
@@ -2285,6 +2313,148 @@ function wireFxReadouts(root, prefix, cfgOf) {
   ro("repeat", "vary", repeatPercentLabel);
   ro("repeat", "decay", repeatPercentLabel);
   ro("repeat", "pitch", (v) => repeatPitchLabel(v, cfgOf("repeat")?.mode));
+  ro("nam", "input", namGainLabel);
+  ro("nam", "output", namGainLabel);
+  ro("nam", "gate", namGateLabel);
+  for (const k of ["bass", "mid", "treble"]) ro("nam", k, namToneLabel);
+  ro("nam", "mic", namMicLabel);
+  ro("nam", "cabmix", namCabMixLabel);
+}
+
+// ── the NAM stage's capture: loading a .nam onto a row ──────────────────────
+// The row's `load .nam` reads a file, packs it (nam.js) into the stage's
+// config and hands it to the rack; the line beside the button says what is
+// loaded and what the worklet made of it (it posts `seqbaby:naminfo`).
+
+/** The rack (or the copy's sub-rack) an id's NAM stage lives on. */
+function namRackOf(t, id) { return isFxInstanceId(id) ? t.fxRack?._extra?.[id] : t.fxRack; }
+
+function wireNamRow(t, row, id) {
+  if (row._namPaint) return;
+  const btn = row.querySelector(".sq-nam__load"), clr = row.querySelector(".sq-nam__clear"), label = row.querySelector(".sq-nam__name");
+  if (!btn || !label) return;
+  const cfgOf = () => t.fxConfig?.[id];
+  let error = "", irError = "";
+  const irBtn = row.querySelector(".sq-nam__irload"), irLabel = row.querySelector(".sq-nam__irname");
+  const cabSel = row.querySelector(".fx-nam-cab, .fxi-nam-cab");
+  const paint = () => {
+    const m = cfgOf()?.model ?? null;
+    const info = namRackOf(t, id)?.namInfo;
+    label.classList.toggle("is-error", !!error || info?.ok === false);
+    if (error) label.textContent = error;
+    else if (info && info.ok === false && m) label.textContent = `couldn't run it: ${info.error}`;
+    else {
+      let s = namModelLabel(m);
+      if (m && info?.ok && info.sr && info.hostSr && Math.abs(info.sr - info.hostSr) > 1) s += ` · ${Math.round(info.sr / 100) / 10}k resampled`;
+      if (m && info?.ok && info.simd === false) s += " · no SIMD (slow)";
+      label.textContent = s;
+    }
+    label.title = m ? `${m.name}: ${m.arch}, ${m.n} weights, trained at ${m.sr}Hz${m.loud != null ? `, ${m.loud.toFixed(1)}dB loud` : ""}` : "";
+    if (clr) clr.hidden = !m;
+    const ir = cfgOf()?.ir ?? null;
+    if (irLabel) {
+      irLabel.classList.toggle("is-error", !!irError);
+      irLabel.textContent = irError || (ir ? `${ir.name} · ${Math.round(ir.n / ir.sr * 1000)}ms` : "no IR loaded");
+    }
+    row.classList.toggle("is-ir", cfgOf()?.cab === "file");
+    row.classList.toggle("has-cab", !!cfgOf()?.cab && cfgOf().cab !== "off");
+  };
+  row._namPaint = paint;
+  row.dataset.namId = id;
+  const apply = () => {
+    const cfg = cfgOf();
+    if (!cfg) return;
+    if (isFxInstanceId(id)) t.fxRack?.applyInstance(id, cfg); else t.fxRack?.applyNam(cfg);
+  };
+  // A packed capture onto this row's stage, from a file.
+  const useModel = (model) => {
+    const cfg = cfgOf();
+    if (!cfg) return;
+    cfg.model = model;
+    apply();
+    // A capture is meant to be heard: a stage still at wet 0 comes up to 1,
+    // through the knob's own input event, as if it had been turned.
+    const wet = row.querySelector(".fx-nam-wet, .fxi-nam-wet");
+    if (wet && Number(wet.value) === 0) {
+      wet.value = "1";
+      wet.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    setStatus(`nam: loaded ${model.name}`);
+  };
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = ".nam,application/json";
+  file.hidden = true;
+  row.appendChild(file);
+  btn.addEventListener("click", () => file.click());
+  file.addEventListener("change", async () => {
+    const f = file.files?.[0];
+    file.value = "";
+    if (!f) return;
+    error = "";
+    try {
+      if (f.size > 32 * 1024 * 1024) throw new NamError("that file is too big to be a capture");
+      useModel(packNamModel(await f.text(), f.name));
+    } catch (e) {
+      error = e instanceof NamError ? e.message : `couldn't read ${f.name}`;
+      setStatus(`nam: ${error}`);
+    }
+    paint();
+    markExternalEdit("load nam capture");
+  });
+  // The cab's impulse response: a .wav, decoded, packed (nam.js), and the cab
+  // select moved to "IR file" through its own change event.
+  const irFile = document.createElement("input");
+  irFile.type = "file";
+  irFile.accept = ".wav,audio/wav,audio/x-wav,audio/*";
+  irFile.hidden = true;
+  row.appendChild(irFile);
+  irBtn?.addEventListener("click", () => irFile.click());
+  cabSel?.addEventListener("change", () => { if (cabSel.value === "file" && !cfgOf()?.ir) irFile.click(); paint(); });
+  irFile.addEventListener("change", async () => {
+    const f = irFile.files?.[0];
+    irFile.value = "";
+    if (!f) return;
+    irError = "";
+    try {
+      if (f.size > 16 * 1024 * 1024) throw new NamError("that file is too big to be an impulse response");
+      const ctx = state.audioCtx || new OfflineAudioContext(1, 1, 48000);
+      const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+      const ir = packNamIR(buf, f.name);
+      const cfg = cfgOf();
+      if (!cfg) return;
+      cfg.ir = ir;
+      if (cabSel && cabSel.value !== "file") {
+        cabSel.value = "file";
+        cabSel.dispatchEvent(new Event("change", { bubbles: true }));
+      } else apply();
+      setStatus(`nam: cab ${ir.name}`);
+    } catch (e) {
+      irError = e instanceof NamError ? e.message : `couldn't read ${f.name} as audio`;
+      setStatus(`nam: ${irError}`);
+    }
+    paint();
+    markExternalEdit("load cab impulse response");
+  });
+  clr?.addEventListener("click", () => {
+    const cfg = cfgOf();
+    if (!cfg) return;
+    error = "";
+    cfg.model = null;
+    apply();
+    paint();
+    markExternalEdit("unload nam capture");
+  });
+  paint();
+}
+
+/** Repaint every NAM row's capture line (a session load, an undo, the worklet's answer). */
+function paintNamRows() {
+  if (typeof document === "undefined") return;
+  for (const row of document.querySelectorAll(".sq-fx__row[data-fx=\"nam\"]")) row._namPaint?.();
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("seqbaby:naminfo", () => paintNamRows());
 }
 
 /** Whether a stage's (or instance's) row is on the track. */
@@ -2494,12 +2664,15 @@ function buildFxInstanceRow(t, id) {
     el.addEventListener(el.tagName === "SELECT" || el.type === "checkbox" ? "change" : "input", apply);
   }
   wireFxReadouts(row, "fxi", () => t.fxConfig[id]);
+  if (stage === "nam") wireNamRow(t, row, id);
   if (title) {
     title.title = "double-click to reset";
     title.classList.add("is-resettable");
     title.addEventListener("dblclick", () => {
       if (!t.fxConfig[id]) return;
+      const keep = stage === "nam" ? { model: t.fxConfig[id].model ?? null, ir: t.fxConfig[id].ir ?? null } : null;
       t.fxConfig[id] = JSON.parse(JSON.stringify(defaultFxConfig()[stage]));
+      if (keep) Object.assign(t.fxConfig[id], keep);
       writeFxRow(row, stage, t.fxConfig[id]);
       t.fxRack?.applyInstance(id, t.fxConfig[id]);
     });

@@ -108,12 +108,12 @@ const GUITAR_PANEL = `
             <label class="sq-guitar__f"><span>sympathy</span><input class="p-gtsymp" type="range" min="0" max="1" step="0.01" value="0.3" title="how much the strings not being played ring along with the ones that are: the shimmer of open strings under a note" /></label>
             <label class="sq-guitar__f"><span>fingers</span><input class="p-gtfnoise" type="range" min="0" max="1" step="0.01" value="0.35" title="finger noise: the squeak of a hand moving along a wound string, and the thump and brief open ring of a finger lifting off a note" /></label>
           </div>
-          <div class="sq-guitar__row">
+          <div class="sq-guitar__row" data-rig="amp">
             <span class="sq-guitar__lbl">amp</span>
-            <select class="p-gtamp" title="which amp. They differ in gain, where the tone stack works, how asymmetrically the first stage clips, and whether the distortion is preamp or power amp">
+            <select class="p-gtamp" title="which amp. They differ in gain, where the tone stack works, how asymmetrically the first stage clips, and whether the distortion is preamp or power amp. di is no amp at all: the pickup straight out, for a capture on the nam amp stage (set the cab to di as well)">
               <option value="clean">clean</option><option value="tweed">tweed</option>
               <option value="brit" selected>brit</option><option value="hi">hi-gain</option>
-              <option value="jazz">jazz</option>
+              <option value="jazz">jazz</option><option value="di">di (no amp)</option>
             </select>
             <label class="sq-guitar__f"><span>bass</span><input class="p-gtbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control. It sits after the first gain stage, so it shapes what is already distorted" /></label>
             <label class="sq-guitar__f"><span>mid</span><input class="p-gtmid" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's mid control, at whichever frequency this amp puts it" /></label>
@@ -122,7 +122,7 @@ const GUITAR_PANEL = `
             <label class="sq-guitar__f"><span>master</span><input class="p-gtmast" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the power amp is driven. Softer than preamp gain" /></label>
             <label class="sq-guitar__f"><span>sag</span><input class="p-gtsag" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the power supply droops under load. The note ducks as it is struck and swells back as it decays" /></label>
           </div>
-          <div class="sq-guitar__row">
+          <div class="sq-guitar__row" data-rig="cab">
             <span class="sq-guitar__lbl">cab</span>
             <select class="p-gtcab" title="the speaker, and the biggest filter in the chain: nothing below about 90Hz or above 5kHz survives it">
               <option value="4x12" selected>4x12</option><option value="2x12">2x12</option>
@@ -172,7 +172,7 @@ const BASS_PANEL = `
             <label class="sq-bass__f"><span>xover</span><input class="p-bsxover" type="range" min="0" max="1" step="0.01" value="0.4" title="where the dirt starts, 120Hz to about 1.4kHz. Low is a fully dirty bass, high is a clean instrument with a snarl on top" /></label>
             <label class="sq-bass__f"><span>sub</span><input class="p-bssub" type="range" min="0" max="1" step="0.01" value="0" title="an octave below the note, tracked and following the string's own level" /></label>
           </div>
-          <div class="sq-bass__row">
+          <div class="sq-bass__row" data-rig="amp">
             <span class="sq-bass__lbl">amp</span>
             <select class="p-bsamp" title="which amp: a clean preamp with no colour, a small valve flip-top, a big valve stack, or a solid-state one that grinds">
               <option value="di">di</option><option value="flip">flip-top</option>
@@ -184,7 +184,7 @@ const BASS_PANEL = `
             <label class="sq-bass__f"><span>treble</span><input class="p-bstreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble, which on a bass is mostly the strings rather than the notes" /></label>
             <label class="sq-bass__f"><span>low cut</span><input class="p-bshpf" type="range" min="0" max="1" step="0.01" value="0.15" title="high-pass filter, 28Hz to 150Hz" /></label>
           </div>
-          <div class="sq-bass__row">
+          <div class="sq-bass__row" data-rig="cab">
             <span class="sq-bass__lbl">cab</span>
             <select class="p-bscab" title="the speaker cabinet. An 8x10 pushes air and rolls off early, a fifteen is all lows and no top, a DI is no cab at all">
               <option value="8x10" selected>8x10</option><option value="4x10">4x10</option>
@@ -1458,6 +1458,22 @@ ${BREATH_PANEL}
             <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
           </div>
           </div>
+        </div>
+        <div class="sq-fx__row" data-fx="nam">
+          <span class="sq-fx__title">nam amp</span>
+          <span class="sq-nam__file"><button type="button" class="sq-nam__load sq-btn--ghost" title="load a Neural Amp Modeler capture (.nam) from your computer: an amp or pedal someone trained, yours or one shared with you. WaveNet (standard, lite, feather, nano), LSTM and Linear captures play">load .nam</button><span class="sq-nam__name">no capture loaded</span><button type="button" class="sq-nam__clear sq-btn--ghost" title="unload the capture: the stage passes its input again" hidden>unload</button></span>
+          <label class="sq-fx__ctl" title="how much of the capture is in the signal: all the way is the amp alone"><span>wet</span><input class="fx-nam-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="how hard the signal hits the capture, \u00b124dB: more is more drive, as turning up the guitar into the amp"><span>input</span><input class="fx-nam-input" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="the level after the capture, \u00b124dB"><span>output</span><input class="fx-nam-output" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="a noise gate keyed on the input: off at the bottom, then a threshold from -100 to -20dB. A high-gain capture hisses without one"><span>gate</span><input class="fx-nam-gate" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="a low shelf at 150Hz after the capture, \u00b112dB"><span>bass</span><input class="fx-nam-bass" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="a bell at 600Hz after the capture, \u00b112dB"><span>mid</span><input class="fx-nam-mid" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="a high shelf at 2.5kHz after the capture, \u00b112dB"><span>treble</span><input class="fx-nam-treble" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="the speaker after the capture. A capture of an amp alone (most are) needs one, or it sounds fizzy; a full-rig capture already has its cab, so leave this off. The built-in cabs are the guitar's and bass's own; IR file plays an impulse response you load"><span>cab</span><select class="fx-nam-cab"><option value="off" selected>off</option><option value="4x12">4x12</option><option value="2x12">2x12</option><option value="1x12">1x12</option><option value="1x8">1x8</option><option value="b8x10">bass 8x10</option><option value="b4x10">bass 4x10</option><option value="b1x15">bass 1x15</option><option value="b2x12">bass 2x12</option><option value="file">IR file</option></select></label>
+          <label class="sq-fx__ctl sq-nam__cabctl" title="where the mic sits on the speaker: the middle leaves the cab as it is, down moves it toward the cone's edge (darker, the top rolled off), up to the centre (brighter, more bite)"><span>mic</span><input class="fx-nam-mic" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl sq-nam__cabctl" title="how much of the cab: all the way is the cab alone, less blends the capture without it back in"><span>blend</span><input class="fx-nam-cabmix" type="range" min="0" max="1" step="0.01" value="1" /></label>
+          <span class="sq-nam__file sq-nam__irfile"><button type="button" class="sq-nam__irload sq-btn--ghost" title="load a cab impulse response (.wav) for the cab select's IR file: up to half a second is kept">load IR</button><span class="sq-nam__irname">no IR loaded</span></span>
+          <label class="sq-fx__ctl" title="normalize: bring the capture to -18dB by the loudness its file states, so a hot fuzz and a quiet clean amp sit at the same level"><span>norm</span><select class="fx-nam-norm"><option value="on" selected>on</option><option value="off">off</option></select></label>
         </div>
         <div class="sq-fx__row" data-fx="pan">
           <span class="sq-fx__title">pan</span>

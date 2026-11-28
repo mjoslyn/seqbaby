@@ -3,6 +3,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
+import { syncNamRig } from "./namRig.js";
 import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
 import { deckOf, deckSilent, masterBusTrack, state } from "./state.js";
@@ -531,6 +532,8 @@ function pruneFeeds() {
 }
 
 export function routeTrackOutput(t, swap = false) {
+  // a rebuilt voice starts with its own amp and cab: put the nam stage's claim back
+  syncNamRig(t);
   const rack = t.fxRack;
   if (!rack) return;
   const dest = outputTargetFor(t);

@@ -78,6 +78,7 @@ const FX = [
   ["beat repeat", "a beat repeat and a slicer, clocked by the sequencer, so repeats and swapped slices land on the grid."],
   ["prism", "four modules in one stage: a character, a movement, a diffusion and a texture, each with five modes."],
   ["pan", "a panner. put an lfo on it and it sweeps."],
+  ["nam amp", "a neural amp modeler capture of a real amp or pedal, from a .nam file, with a speaker cab or an IR of your own, mic position and a noise gate."],
   ["delay", "a delay with feedback, free or synced to the tempo."],
   ["reverb", "a reverb built as a delay network rather than an impulse, so the decay knob turns while it plays."],
 ] as const;
@@ -281,7 +282,7 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>the fx rack</h2>
-          <span className={styles.sectionSub}>seventeen stages on every track, in whatever order you put them. any of them can be on a track more than once.</span>
+          <span className={styles.sectionSub}>eighteen stages on every track, in whatever order you put them. any of them can be on a track more than once.</span>
         </div>
         <ul className={styles.box}>
           {byName([...FX]).map(([name, line], i) => (

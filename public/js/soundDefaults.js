@@ -46,6 +46,13 @@ export function defaultFxConfig() {
     prism:      { wet: 0, char: 0.25, charmode: "drive", move: 0.3, movemode: "doubler",
                   diff: 0.35, diffmode: "space", tex: 0.25, texmode: "cassette",
                   tilt: 0.5, rate: 0.35, time: 0.4, sens: 0.5, drift: 0.2, route: "split" },
+    // A Neural Amp Modeler capture (nam.js). `model` is the loaded .nam, packed
+    // (config + base64 weights), null until one is loaded; with none the stage
+    // passes its input. input / output are ±24dB with the middle 0, the tone
+    // knobs ±12dB, gate 0 off.
+    // `cab` is the speaker after it: off, a built-in cab (NAM_CABS), or
+    // "file", the impulse response in `ir` (packed like the model).
+    nam:        { wet: 0, input: 0.5, output: 0.5, gate: 0, bass: 0.5, mid: 0.5, treble: 0.5, norm: "on", cab: "off", mic: 0.5, cabmix: 1, model: null, ir: null },
     delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
     reverb:     { decay: 2, wet: 0 },
   };
@@ -68,6 +75,22 @@ export const REPEAT_GRID = [0.25, 0.5, 2 / 3, 1, 4 / 3, 2, 8 / 3, 4, 8, 16];
 export const REPEAT_GRID_LABELS = ["1/64", "1/32", "1/16t", "1/16", "1/8t", "1/8", "1/4t", "1/4", "1/2", "1 bar"];
 export const REPEAT_INTERVAL = [4, 8, 16, 32, 64];
 export const REPEAT_GATE = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
+
+/** The NAM stage's knobs (nam.js), every one 0..1 and an AudioParam:
+ *  `fx-nam-<k>` the control, `nam_<k>` the LFO, `fx.nam.<k>` the lane. */
+export const NAM_KNOBS = ["input", "output", "gate", "bass", "mid", "treble", "mic", "cabmix"];
+/** The ones on the worklet node; mic and cabmix are on the cab after it. */
+export const NAM_NODE_KNOBS = ["input", "output", "gate", "bass", "mid", "treble"];
+export const NAM_KNOB_LABELS = {
+  input: "nam input", output: "nam output", gate: "nam gate", bass: "nam bass", mid: "nam mid", treble: "nam treble",
+  mic: "nam mic position", cabmix: "nam cab blend",
+};
+/** Its select: normalize the capture's level by its loudness, or not. */
+export const NAM_NORMS = ["on", "off"];
+/** The cab after the capture: off, the guitar's four and the bass's four
+ *  (nam.js builds their impulse responses from the instruments' own cab
+ *  filters), or "file", a loaded impulse response. */
+export const NAM_CABS = ["off", "4x12", "2x12", "1x12", "1x8", "b8x10", "b4x10", "b1x15", "b2x12", "file"];
 
 /** The prism's four modules (prism.js): each one's characters, in the order
  *  the processor indexes them. */

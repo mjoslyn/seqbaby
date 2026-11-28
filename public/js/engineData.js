@@ -810,7 +810,7 @@ export const GUITAR_NUM_CTLS = [
 
 /** Select controls: [short key, default, [values]]. */
 export const GUITAR_SEL_CTLS = [
-  ["amp",   "brit",   ["clean", "tweed", "brit", "hi", "jazz"]],
+  ["amp",   "brit",   ["clean", "tweed", "brit", "hi", "jazz", "di"]],
   ["cab",   "4x12",   ["4x12", "2x12", "1x12", "1x8", "di"]],
   ["pkupt", "hum",    ["single", "hum", "p90"]],
   ["tremw", "sine",   ["sine", "square"]],
