@@ -4290,8 +4290,9 @@ down, they do not stack). The button is lit while any of them is on
   the cluster without its buttons. `setMuteScene(i)` is the idempotent form of
   a tap (-1 puts back the mutes from before). Its caller is a game that runs
   the engine in a hidden frame and scores itself with the song
-  (mjoslyn/harbor-of-small-hours, served at `/game` by a route on its own
-  Worker).
+  (mjoslyn/harbor-of-small-hours, on a Worker and an address of its own,
+  which fetches `/studio?embed` and the engine's files from here; it is not
+  served from this domain).
 - The song's own tracks only (`inSong`): a mix deck's are not in a scene.
 - Builder: `setMuteScene(song, scene, tracks)` (MCP `set_mute_scene`).
 
