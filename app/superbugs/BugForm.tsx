@@ -35,6 +35,8 @@ export default function BugForm() {
   // Why the check can't give a token (blocked script, a hostname Cloudflare
   // doesn't allow). Without it the button just sat disabled with no reason.
   const [checkErr, setCheckErr] = useState("");
+  // Whether the Turnstile widget is on screen (see the render call).
+  const [shown, setShown] = useState(false);
   // Read after mount: the server has no referrer or storage to render it from.
   const [ctx, setCtx] = useState<Context>({ referrer: null, studio: null });
   const [attach, setAttach] = useState(true);
@@ -53,13 +55,19 @@ export default function BugForm() {
         widget.current = ts.render(box.current, {
           sitekey: SITE_KEY,
           theme: "auto",
+          // Invisible unless Cloudflare needs a click (or it failed); hidden
+          // again once it passes.
+          appearance: "interaction-only",
+          "before-interactive-callback": () => setShown(true),
           callback: (t: string) => {
             setToken(t);
             setCheckErr("");
+            setShown(false);
           },
           "expired-callback": () => setToken(""),
           "error-callback": () => {
             setToken("");
+            setShown(true);
             setCheckErr("the robot check failed");
           },
         });
@@ -168,7 +176,9 @@ export default function BugForm() {
         <small>it goes on a public issue. leave it blank if that bothers you.</small>
       </label>
       <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className={styles.trap} />
-      {SITE_KEY && <div ref={box} />}
+      {/* Hidden only once passed: until then interaction-only keeps it
+          invisible itself, and the check has to run inside it. */}
+      {SITE_KEY && <div ref={box} hidden={!!token && !shown} />}
       {checkErr && !token && (
         <p className={styles.err} role="alert">
           {checkErr}.{" "}

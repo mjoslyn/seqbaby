@@ -1486,6 +1486,11 @@ function FreeStrip({
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
   const [checkErr, setCheckErr] = useState("");
+  // Whether the widget is on screen. It runs "interaction-only": invisible
+  // while Cloudflare checks the visitor in the background, drawn only when it
+  // needs a click (or has failed), and hidden again once it passes.
+  const [shown, setShown] = useState(false);
+  const [passed, setPassed] = useState(false);
   useEffect(() => {
     if (!check || !TURNSTILE_SITE_KEY) return;
     let gone = false;
@@ -1496,13 +1501,22 @@ function FreeStrip({
           sitekey: TURNSTILE_SITE_KEY,
           theme: "auto",
           size: "flexible",
+          appearance: "interaction-only",
+          "before-interactive-callback": () => setShown(true),
           callback: (t: string) => {
             onToken(t);
             setCheckErr("");
+            setShown(false);
+            setPassed(true);
           },
-          "expired-callback": () => onToken(""),
+          "expired-callback": () => {
+            onToken("");
+            setPassed(false);
+          },
           "error-callback": () => {
             onToken("");
+            setPassed(false);
+            setShown(true);
             setCheckErr("the robot check failed, try again");
           },
         });
@@ -1539,8 +1553,10 @@ function FreeStrip({
       )}
       {check && TURNSTILE_SITE_KEY && n > 0 && (
         <>
-          <div className={styles.cxFreeHint}>one quick check before your first song:</div>
-          <div ref={box} />
+          {shown && <div className={styles.cxFreeHint}>one quick check before your first song:</div>}
+          {/* Hidden only once passed: before then interaction-only keeps it
+              invisible itself, and the check has to run inside it. */}
+          <div ref={box} hidden={passed} />
           {checkErr && <div className={styles.cxFreeHint}>{checkErr}</div>}
         </>
       )}
