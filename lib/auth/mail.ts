@@ -49,3 +49,9 @@ export function linkMail(to: string, subject: string, lead: string, label: strin
 </div>`,
   };
 }
+
+/** The site's root with a trailing slash, for links in mail: the deploy's
+ *  own address when it has one, else the production site. */
+export function siteBase(env: CloudflareEnv, fallback = "https://www.playseqbaby.com/"): string {
+  return env.BETTER_AUTH_URL ? `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/` : fallback;
+}

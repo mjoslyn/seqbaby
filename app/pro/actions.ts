@@ -5,7 +5,7 @@
 
 import { currentUser } from "@/lib/auth/session";
 import { cfEnv } from "@/lib/cf";
-import { linkMail, sendMail } from "@/lib/auth/mail";
+import { linkMail, sendMail, siteBase } from "@/lib/auth/mail";
 import { isAdminEmail } from "@/lib/plans.js";
 import { requestPro } from "@/lib/data/proRequests.js";
 import { SITE_URL } from "@/app/shareCard";
@@ -27,7 +27,7 @@ export async function requestProAccess(message: string): Promise<{ ok?: boolean;
     .split(/[\s,;]+/)
     .map((x) => x.trim())
     .filter((x) => x && isAdminEmail(x, env.ADMIN_EMAILS));
-  const base = env.BETTER_AUTH_URL ? `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/` : SITE_URL;
+  const base = siteBase(env, SITE_URL);
   for (const to of admins) {
     await sendMail(
       env,

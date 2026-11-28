@@ -5,10 +5,10 @@
 
 import { currentUser } from "@/lib/auth/session";
 import { cfEnv } from "@/lib/cf";
-import { isAdminEmail } from "@/lib/plans.js";
+import { isAdminEmail, planById } from "@/lib/plans.js";
 import * as admin from "@/lib/data/admin.js";
 import { decideProRequest } from "@/lib/data/proRequests.js";
-import { linkMail, sendMail } from "@/lib/auth/mail";
+import { linkMail, sendMail, siteBase } from "@/lib/auth/mail";
 import { SITE_URL } from "@/app/shareCard";
 
 type Result = { ok?: boolean; error?: string };
@@ -25,11 +25,36 @@ const fail = (e: unknown): Result => ({ error: String((e as Error)?.message ?? e
 export async function adminSetPlan(userId: string, plan: string, until: string | null): Promise<Result> {
   const a = await asAdmin();
   if (!a) return { error: "not allowed" };
+  let r: Awaited<ReturnType<typeof admin.setPlan>>;
   try {
-    return await admin.setPlan(a.env, a.user.id, userId, plan, until || null);
+    r = await admin.setPlan(a.env, a.user.id, userId, plan, until || null);
   } catch (e) {
     return fail(e);
   }
+  if ("error" in r) return r;
+  // Tell the account, best effort, and only when something changed.
+  if (r.changed && r.email) {
+    const base = siteBase(a.env, SITE_URL);
+    const day = r.until ? r.until.slice(0, 10) : null;
+    const mail =
+      r.plan === "pro"
+        ? linkMail(
+            r.email,
+            "you're on seqbaby pro",
+            `Your account is on seqbaby pro${day ? ` until ${day}` : ""}: compose has no monthly cap, and Sonnet and Opus are in its model menu.`,
+            "open the studio",
+            `${base}studio`,
+          )
+        : linkMail(
+            r.email,
+            "your seqbaby plan",
+            `Your account is on the free plan now: ${planById("free")?.turns ?? 50} compose turns a month, on Haiku. You can ask for pro again any time.`,
+            "see your plan",
+            `${base}pro`,
+          );
+    await sendMail(a.env, mail).catch((e) => console.error("[admin] could not mail the account", e));
+  }
+  return { ok: true };
 }
 
 export async function adminSetSuspended(userId: string, on: boolean): Promise<Result> {
@@ -78,7 +103,7 @@ export async function adminDecidePro(requestId: string, approve: boolean, until:
     return fail(e);
   }
   if (r.error || !r.email) return r;
-  const base = a.env.BETTER_AUTH_URL ? `${a.env.BETTER_AUTH_URL.replace(/\/$/, "")}/` : SITE_URL;
+  const base = siteBase(a.env, SITE_URL);
   const mail = approve
     ? linkMail(
         r.email,

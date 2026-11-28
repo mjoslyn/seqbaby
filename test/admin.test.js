@@ -57,7 +57,12 @@ test("setting a plan is stored, validated, cleared for free, and logged", async 
   const env = await world();
   assert.equal((await admin.setPlan(env, A, B, "gold")).error, "no such plan");
   assert.equal((await admin.setPlan(env, A, B, "pro", "not a date")).error, "that date doesn't read as a date");
-  assert.ok((await admin.setPlan(env, A, B, "pro", "2027-01-01")).ok);
+  const first = await admin.setPlan(env, A, B, "pro", "2027-01-01");
+  assert.ok(first.ok);
+  assert.equal(first.changed, true);
+  assert.equal(first.plan, "pro");
+  assert.ok(first.email);
+  assert.equal((await admin.setPlan(env, A, B, "pro", "2027-01-01")).changed, false, "the same plan again changes nothing");
   let row = await admin.planRow(env, B);
   assert.equal(row.plan, "pro");
   assert.equal(row.plan_until, "2027-01-01T00:00:00.000Z");
