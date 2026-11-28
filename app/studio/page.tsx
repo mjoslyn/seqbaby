@@ -23,6 +23,7 @@ import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
 import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel } from "@/lib/composeModels.js";
 import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
 import { FREE_COOKIE, freeBuckets, freeConfig, readFree } from "@/lib/freeCompose.js";
+import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
 import { cookies } from "next/headers";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -144,13 +145,16 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   let name: string | null = null;
   let username: string | null = null;
   let avatarGrid: string | null = null;
+  // A paid plan (lib/plans.js) gets the model menu an unlock link gives.
+  let paidModels = false;
   if (user) {
     const profile = await first(
       env.DB,
-      "select display_name, username, avatar_grid from profiles where id = ?1",
+      "select display_name, username, avatar_grid, plan, plan_until from profiles where id = ?1",
       user.id,
     ).catch(() => null);
     avatarGrid = profile?.avatar_grid ?? null;
+    paidModels = effectivePlan(profile).models.length > 0;
     name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
   }
@@ -159,7 +163,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   // sonnet and opus on the menu.
   const unlocked = !!(await readUnlock((await cookies()).get(UNLOCK_COOKIE)?.value, env.COMPOSE_UNLOCK_CODE));
   const defaultModel = env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL;
-  const models = allowedModels({ picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS), unlocked, defaultModel });
+  const models = allowedModels({ picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS) || isAdminEmail(user?.email, env.ADMIN_EMAILS), unlocked: unlocked || paidModels, defaultModel });
 
   // Free compose (lib/freeCompose.js): a few turns on Haiku with no account.
   // How many are left is asked of the visitor's limits object only when they

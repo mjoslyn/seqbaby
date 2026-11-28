@@ -22,6 +22,8 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 # FREESOUND_API_KEY=xxx
 # Accounts (by email) that get a model menu in the compose panel:
 # COMPOSE_MODEL_PICKERS=you@example.com, friend@example.com
+# Accounts (by email) that may open /admin: users, plans, suspensions.
+# ADMIN_EMAILS=you@example.com
 # A code shared as /studio?unlock=<code>: compose without an account, and
 # sonnet / opus in its model menu. Change it to rotate (old links and cookies stop).
 # COMPOSE_UNLOCK_CODE=some-code

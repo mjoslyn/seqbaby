@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMyProfile } from "@/app/profile/actions";
 import { currentUser } from "@/lib/auth/session";
+import { cfEnv } from "@/lib/cf";
+import { isAdminEmail } from "@/lib/plans.js";
 import ProfileForm from "./ProfileForm";
 import AccountSettings from "./AccountSettings";
 import PatchManager from "./PatchManager";
@@ -15,6 +17,7 @@ export default async function SettingsPage() {
   if (!profile) redirect("/login");
 
   const user = await currentUser();
+  const admin = isAdminEmail(user?.email, (await cfEnv()).ADMIN_EMAILS);
 
   return (
     <div className={styles.page}>
@@ -24,6 +27,7 @@ export default async function SettingsPage() {
           {profile.username && (
             <Link href={`/u/${profile.username}`}>view my profile</Link>
           )}
+          {admin && <Link href="/admin">admin</Link>}
         </nav>
         <h1 className={styles.pageTitle}>profile settings</h1>
         <p className={styles.pageSub}>

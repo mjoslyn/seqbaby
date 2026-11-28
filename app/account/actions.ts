@@ -5,9 +5,7 @@ import { getAuth } from "@/lib/auth";
 import { MIN_PASSWORD } from "@/lib/auth/config.js";
 import { currentUser } from "@/lib/auth/session";
 import { cfEnv } from "@/lib/cf";
-import { all, run } from "@/lib/data/db.js";
-import { dropPrefix, patchPrefix, songPrefix } from "@/lib/data/blob.js";
-import { setPrefix } from "@/lib/data/sets.js";
+import { deleteUserData } from "@/lib/data/accounts.js";
 
 type State = { error?: string; message?: string };
 
@@ -57,15 +55,7 @@ export async function deleteAccount(confirm: string): Promise<{ ok?: boolean; er
   if (!user) return { error: "not signed in" };
   const env = await cfEnv();
   try {
-    const [songs, patches, sets] = await Promise.all([
-      all(env.DB, "select id from songs where owner_id = ?1", user.id),
-      all(env.DB, "select id from patches where owner_id = ?1", user.id),
-      all(env.DB, "select id from sets where owner_id = ?1", user.id),
-    ]);
-    for (const s of songs) await dropPrefix(env.BLOBS, songPrefix(s.id));
-    for (const p of patches) await dropPrefix(env.BLOBS, patchPrefix(p.id));
-    for (const x of sets) await dropPrefix(env.BLOBS, setPrefix(x.id));
-    await run(env.DB, 'delete from "user" where id = ?1', user.id);
+    await deleteUserData(env, user.id);
   } catch (e) {
     return { error: String((e as Error)?.message ?? e) };
   }

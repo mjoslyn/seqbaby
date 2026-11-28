@@ -20,6 +20,8 @@ import {
   readFree,
 } from "@/lib/freeCompose.js";
 import { turnstilePasses } from "@/lib/turnstile.js";
+import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
+import { planRow } from "@/lib/data/admin.js";
 
 export const dynamic = "force-dynamic";
 
@@ -99,11 +101,13 @@ export async function POST(req: Request) {
     .map((h) => ({ role: h.role, text: h.text.slice(0, 20000) }));
 
   // A model asked for is honoured only when this visitor may pick it: every
-  // model for an account on the deploy's list, sonnet and opus for an unlock;
-  // anything else runs on the deploy's own.
+  // model for an account on the deploy's list, sonnet and opus for an unlock
+  // or a paid plan (lib/plans.js); anything else runs on the deploy's own.
+  const plan = userId ? effectivePlan(await planRow(env, userId)) : null;
   const model = pickedModel(body.model, allowedModels({
-    picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS),
-    unlocked: !!unlockId,
+    // Admins (ADMIN_EMAILS) pick from every model, as the pickers list does.
+    picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS) || isAdminEmail(user?.email, env.ADMIN_EMAILS),
+    unlocked: !!unlockId || (plan?.models.length ?? 0) > 0,
     defaultModel: env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL,
   }));
 

@@ -4728,6 +4728,35 @@ The shell moved off Supabase and Netlify. What each piece is now:
   columns computed). The endpoint is off unless the `MIGRATION_TOKEN` secret
   is set; delete it after.
 
+## Admin, plans and suspensions (`app/admin`, `lib/plans.js`, `lib/data/admin.js`)
+
+`/admin` lists every account (search, filter by plan or suspension, 50 a
+page) with its songs, compose turns in the last 30 days and last session,
+and lets an admin change its plan, suspend it, sign it out everywhere or
+delete it. Every change goes in `admin_log` (migration 0007), shown on the
+page.
+
+- **Admins are the emails on `ADMIN_EMAILS`**, a secret, never a column:
+  nothing on any page can make someone one. Anyone else gets a 404 at
+  `/admin`, and every server action in `app/admin/actions.ts` checks again.
+  `lib/data/admin.js` checks nothing itself (it reads across accounts) and
+  refuses to suspend or delete the acting admin's own account.
+- **A plan is `profiles.plan` (+ `plan_until`)**, a name from `PLANS` in
+  `lib/plans.js` (free, pro), validated in code so a new level needs no
+  migration. `effectivePlan` lapses a plan past its `plan_until` back to free.
+  No payment flow yet: plans are granted by hand. What a plan unlocks is its
+  entry in `PLANS`: today `pro` adds sonnet and opus to the compose menu
+  (the compose route and the studio page pass it to `allowedModels` as an
+  unlock does). Admins get every model on `COMPOSE_MODELS` (haiku, sonnet,
+  opus, fable), as an account on `COMPOSE_MODEL_PICKERS` does.
+- **Suspended** (`profiles.suspended`) deletes the account's sessions, and
+  the auth config's `session.create.before` hook (`isSuspended`,
+  lib/auth/config.js) refuses a new one. A cookie-cached session lasts at
+  most the cache's five minutes.
+- Deleting from `/admin` is `deleteUserData` (lib/data/accounts.js), the
+  same routine as an account deleting itself, R2 prefixes first.
+- Tests: `test/admin.test.js`.
+
 ## The homepage (`/`) and the studio (`/studio`)
 
 The studio used to be `/`. It is `/studio` now, and `/` is a homepage: a toy

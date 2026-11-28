@@ -14,6 +14,9 @@ interface CloudflareEnv {
   ANTHROPIC_MODEL?: string;
   /** Emails allowed to pick their compose model (comma or space separated). */
   COMPOSE_MODEL_PICKERS?: string;
+  /** Emails that may open /admin (comma or space separated): accounts, plans,
+   *  suspensions (lib/plans.js, lib/data/admin.js). */
+  ADMIN_EMAILS?: string;
   /** The unlock code (lib/unlock.js): /studio?unlock=<code> lets compose run
    *  without an account and offers sonnet and opus. Rotate it to cut off every
    *  link and cookie handed out under the old one. */
