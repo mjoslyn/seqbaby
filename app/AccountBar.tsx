@@ -41,6 +41,7 @@ export function AccountBar({
   models = [],
   unlocked = false,
   free = null,
+  accountPlan = null,
   defaultModel,
   viewing = null,
 }: {
@@ -65,6 +66,8 @@ export function AccountBar({
   unlocked?: boolean;
   /** Free compose with no account (lib/freeCompose.js), when offered. */
   free?: FreeCompose | null;
+  /** A plan's monthly compose allowance (free: 50), when it has one. */
+  accountPlan?: { turns: number; left: number | null } | null;
   /** The deploy's own compose model. */
   defaultModel?: string;
   /** Someone else's song, named by the URL: drawn as "title by @owner". */
@@ -207,6 +210,7 @@ export function AccountBar({
           models={models}
           unlocked={unlocked}
           free={free}
+          accountPlan={accountPlan}
           defaultModel={defaultModel}
         />
         <button

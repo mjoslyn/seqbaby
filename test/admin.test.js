@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { makeEnv } from "./helpers/cf.js";
 import { createProfile, makeAuth } from "../lib/auth/config.js";
 import * as admin from "../lib/data/admin.js";
-import { PLANS, effectivePlan, isAdminEmail, planById } from "../lib/plans.js";
+import { HAIKU, PLANS, effectivePlan, isAdminEmail, planById } from "../lib/plans.js";
+import * as pro from "../lib/data/proRequests.js";
 import { allowedModels } from "../lib/composeModels.js";
 
 async function user(env, id, email) {
@@ -152,4 +153,48 @@ test("a suspended account is signed out and cannot sign in until unsuspended", a
   assert.ok(sessions() > 0);
   assert.equal((await admin.signOutEverywhere(env, A, id)).sessions, 1);
   assert.deepEqual((await admin.adminLog(env)).map((l) => l.action), ["signout", "unsuspend", "signout", "suspend"]);
+});
+
+test("the free plan is 50 turns a month on Haiku; pro has no cap and no fixed model", () => {
+  assert.deepEqual([planById("free").turns, planById("free").model], [50, HAIKU]);
+  assert.deepEqual([planById("pro").turns, planById("pro").model], [null, null]);
+  assert.equal(HAIKU, "claude-haiku-5-5");
+});
+
+test("a pro request: one waiting at a time, none once on pro, approve puts the account on pro", async () => {
+  const env = await world();
+  assert.ok((await pro.requestPro(env, B, "  acid techno, lots of it  ")).ok);
+  const again = await pro.requestPro(env, B, "again");
+  assert.equal(again.pending, true, "a second request while one waits is refused");
+  let mine = await pro.myProRequest(env, B);
+  assert.equal(mine.status, "pending");
+  assert.equal(mine.message, "acid techno, lots of it");
+  const waiting = await pro.listProRequests(env);
+  assert.equal(waiting.length, 1);
+  assert.equal(waiting[0].email, "someone@example.com");
+
+  const ok = await pro.decideProRequest(env, A, waiting[0].id, true, "2027-06-01");
+  assert.deepEqual(ok, { ok: true, email: "someone@example.com" });
+  assert.equal(effectivePlan(await admin.planRow(env, B), Date.parse("2027-01-01")).id, "pro");
+  assert.equal((await pro.myProRequest(env, B)).status, "approved");
+  assert.equal((await pro.listProRequests(env)).length, 0);
+  assert.match((await pro.decideProRequest(env, A, waiting[0].id, true)).error, /isn't waiting/);
+  assert.match((await pro.requestPro(env, B, "")).error, /already on pro/);
+});
+
+test("a declined pro request leaves the plan, is logged, and can be asked again", async () => {
+  const env = await world();
+  await pro.requestPro(env, B, "");
+  const [r] = await pro.listProRequests(env);
+  assert.ok((await pro.decideProRequest(env, A, r.id, false)).ok);
+  assert.equal(effectivePlan(await admin.planRow(env, B)).id, "free");
+  assert.equal((await admin.adminLog(env))[0].action, "pro declined");
+  assert.equal((await pro.listProRequests(env, { status: "declined" })).length, 1);
+  assert.ok((await pro.requestPro(env, B, "please")).ok);
+});
+
+test("a long pro message is cut to 500 characters", async () => {
+  const env = await world();
+  await pro.requestPro(env, B, "x".repeat(900));
+  assert.equal((await pro.myProRequest(env, B)).message.length, pro.PRO_MESSAGE_MAX);
 });

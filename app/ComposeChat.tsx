@@ -78,6 +78,10 @@ type ComposeResponse = {
   signup?: boolean;
   /** The route wants a Turnstile token before a visitor's first free turn. */
   check?: boolean;
+  /** A plan's monthly allowance (lib/plans.js): turns left after this one. */
+  planLeft?: number | null;
+  /** The answer is "request pro": the plan's monthly turns ran out. */
+  pro?: boolean;
 };
 
 /** Free compose with no account, as the studio page found it. */
@@ -425,6 +429,7 @@ export default function ComposeChat({
   models = [],
   unlocked = false,
   free = null,
+  accountPlan = null,
   defaultModel = DEFAULT_COMPOSE_MODEL,
 }: {
   signedIn: boolean;
@@ -439,6 +444,8 @@ export default function ComposeChat({
   unlocked?: boolean;
   /** Free turns with no account (lib/freeCompose.js), when offered. */
   free?: FreeCompose | null;
+  /** The account's plan's monthly allowance (free: 50), when it has one. */
+  accountPlan?: { turns: number; left: number | null } | null;
   /** The deploy's own model, what the menu starts on. */
   defaultModel?: string;
 }) {
@@ -459,6 +466,9 @@ export default function ComposeChat({
   // one with: free compose cannot work here, and the panel says so.
   const [checkMissing, setCheckMissing] = useState(!!free?.check && !TURNSTILE_SITE_KEY);
   const freeOut = isFree && freeLeft === 0;
+  // The account's monthly allowance left (null: not known yet, so all of it).
+  const [planLeft, setPlanLeft] = useState<number | null>(accountPlan?.left ?? null);
+  const planOut = !!accountPlan && planLeft === 0;
   const freeBlocked = isFree && (freeOut || checkMissing || (needCheck && !checkToken));
   const modelIds = models.map((m) => m.id).join(",");
   const [model, setModel] = useState(defaultModel);
@@ -569,6 +579,7 @@ export default function ComposeChat({
   // What a turn's start says back about free compose.
   const onFreeReply = useCallback((r: ComposeResponse, ok: boolean) => {
     if (typeof r.freeLeft === "number") setFreeLeft(r.freeLeft);
+    if (typeof r.planLeft === "number") setPlanLeft(r.planLeft);
     if (r.check) {
       setCheckToken("");
       setNeedCheck(!!TURNSTILE_SITE_KEY);
@@ -733,7 +744,7 @@ export default function ComposeChat({
   const send = useCallback(async (prompt?: string, modelOverride?: string, meta?: { genre: string; seed: number }) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
-    if (!canCompose || freeBlocked) return;
+    if (!canCompose || freeBlocked || planOut) return;
     // A turn on deck B is sent that deck's song, or, with nothing loaded
     // there, an empty session to write a new one in: the open song's tempo, so
     // the two mix, and a line saying what it is for.
@@ -862,7 +873,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, canCompose, canPickModel, model, deck, letGo, checkToken, onFreeReply, freeBlocked]);
+  }, [input, sending, messages, canCompose, canPickModel, model, deck, letGo, checkToken, onFreeReply, freeBlocked, planOut]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -1234,7 +1245,19 @@ export default function ComposeChat({
               onToken={setCheckToken}
             />
           )}
-          {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff || freeBlocked} />}
+          {accountPlan && !isFree && (
+            <div className={styles.cxFree}>
+              <div className={styles.cxFreeLine}>
+                <span>
+                  {planLeft === 0
+                    ? `that's your ${accountPlan.turns} turns this month.`
+                    : `${planLeft ?? accountPlan.turns} of ${accountPlan.turns} turns left this month, on Haiku.`}
+                </span>
+                <a className={styles.smallBtn} href="/pro">request pro</a>
+              </div>
+            </div>
+          )}
+          {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff || freeBlocked || planOut} />}
           <div className={styles.chatLog} ref={logRef} hidden={tab !== "chat"}>
             {messages.length === 0 && !sending && (
               <div className={styles.cxEmpty}>
@@ -1453,7 +1476,7 @@ export default function ComposeChat({
               <button
                 className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                 onClick={() => send()}
-                disabled={sending || !input.trim() || composeOff || freeBlocked}
+                disabled={sending || !input.trim() || composeOff || freeBlocked || planOut}
               >
                 {sending ? "working…" : "send"}
               </button>
@@ -1541,8 +1564,8 @@ function FreeStrip({
           {n === 0
             ? `that's your ${turns} free turns.`
             : left === null
-            ? `${turns} free turns, no account needed.`
-            : `${n} of ${turns} free turns left.`}
+            ? `${turns} free turns a month, no account needed.`
+            : `${n} of ${turns} free turns left this month.`}
         </span>
         <button type="button" className={styles.smallBtn} onClick={signup}>
           {n === 0 ? "make an account to keep going" : "make an account for more"}

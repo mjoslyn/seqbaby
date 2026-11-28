@@ -111,7 +111,9 @@ env / fx / eq / comp / mod / automation per track.
 │                              0002_compose_turns.sql: how compose turns went; 0003_sets.sql: recorded live sets;
 │                              0004_compose_critic.sql: the critic's columns on compose_turns;
 │                              0005_song_tags.sql: songs.tags;
-│                              0006_song_key.sql: songs.song_key)
+│                              0006_song_key.sql: songs.song_key;
+                             0007_plans_admin.sql: plans, suspensions, admin_log;
+                             0008_pro_requests.sql: requests for pro)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -4745,10 +4747,22 @@ page.
   `lib/plans.js` (free, pro), validated in code so a new level needs no
   migration. `effectivePlan` lapses a plan past its `plan_until` back to free.
   No payment flow yet: plans are granted by hand. What a plan unlocks is its
-  entry in `PLANS`: today `pro` adds sonnet and opus to the compose menu
-  (the compose route and the studio page pass it to `allowedModels` as an
-  unlock does). Admins get every model on `COMPOSE_MODELS` (haiku, sonnet,
-  opus, fable), as an account on `COMPOSE_MODEL_PICKERS` does.
+  entry in `PLANS`: `free` is `turns: 50` a rolling 30 days (`PLAN_WINDOW_MS`)
+  on `model: HAIKU`, counted in the account's own `ComposeLimits` object
+  (`users/<id>`, `takeFree`, beside its in-flight record) by the compose
+  route, which answers `pro: true` when they run out; `pro` has no monthly cap
+  and adds sonnet and opus to the compose menu (passed to `allowedModels` as
+  an unlock does). The panel shows a free account its turns left with a link
+  to `/pro`. Admins and accounts on `COMPOSE_MODEL_PICKERS` are exempt from a
+  plan's model and allowance and get every model on `COMPOSE_MODELS`. A
+  visitor with no account is not a plan: lib/freeCompose.js, 10 a month.
+- **Asking for pro** (`/pro`, `app/pro/`, `lib/data/proRequests.js`,
+  migration 0008): a signed-in free account sends one optional line about
+  what it makes; at most one request waits per account (a partial unique
+  index). The admins on `ADMIN_EMAILS` are emailed (best effort). `/admin`
+  lists the waiting requests: approve (pro until a date, or for good, through
+  `setPlan`) or decline (logged as `pro declined`), each emailing the
+  account. An account reads only its own request; the list is the admin's.
 - **Suspended** (`profiles.suspended`) deletes the account's sessions, and
   the auth config's `session.create.before` hook refuses a new one
   (`isSuspended`, lib/data/admin.js). A cookie-cached session lasts at most

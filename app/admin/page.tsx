@@ -5,6 +5,8 @@ import { cfEnv } from "@/lib/cf";
 import { PLANS, isAdminEmail } from "@/lib/plans.js";
 import { adminLog, adminStats, listUsers } from "@/lib/data/admin.js";
 import AdminUsers from "./AdminUsers";
+import ProRequests from "./ProRequests";
+import { listProRequests } from "@/lib/data/proRequests.js";
 import styles from "@/app/ui.module.css";
 import a from "./admin.module.css";
 
@@ -27,10 +29,11 @@ export default async function AdminPage({
   const plan = sp.plan ?? "";
   const suspended = sp.suspended === "1";
   const offset = Math.max(0, Number(sp.offset) || 0);
-  const [list, stats, log] = await Promise.all([
+  const [list, stats, log, requests] = await Promise.all([
     listUsers(env, { q, plan, suspended, offset }),
     adminStats(env),
     adminLog(env, 30),
+    listProRequests(env, { status: "pending" }),
   ]);
   const page = (o: number) => {
     const p = new URLSearchParams();
@@ -60,6 +63,10 @@ export default async function AdminPage({
           <Stat n={stats.turns_7d} label="compose turns this week" />
         </div>
 
+        <h2 className={a.h2}>pro requests{requests.length ? ` (${requests.length})` : ""}</h2>
+        <ProRequests requests={requests} />
+
+        <h2 className={a.h2}>accounts</h2>
         <form className={a.filters} action="/admin">
           <input className={styles.input} name="q" defaultValue={q} placeholder="search email or name" aria-label="search" />
           <select className={styles.input} name="plan" defaultValue={plan} aria-label="plan">

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { getMyProfile } from "@/app/profile/actions";
 import { currentUser } from "@/lib/auth/session";
 import { cfEnv } from "@/lib/cf";
-import { isAdminEmail } from "@/lib/plans.js";
+import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
+import { planRow } from "@/lib/data/admin.js";
 import ProfileForm from "./ProfileForm";
 import AccountSettings from "./AccountSettings";
 import PatchManager from "./PatchManager";
@@ -17,7 +18,9 @@ export default async function SettingsPage() {
   if (!profile) redirect("/login");
 
   const user = await currentUser();
-  const admin = isAdminEmail(user?.email, (await cfEnv()).ADMIN_EMAILS);
+  const env = await cfEnv();
+  const admin = isAdminEmail(user?.email, env.ADMIN_EMAILS);
+  const plan = user ? effectivePlan(await planRow(env, user.id)) : null;
 
   return (
     <div className={styles.page}>
@@ -32,6 +35,14 @@ export default async function SettingsPage() {
         <h1 className={styles.pageTitle}>profile settings</h1>
         <p className={styles.pageSub}>
           Your profile showcases the songs, patches and sets you publish.
+        </p>
+        <p className={styles.pageSub}>
+          plan: <b>{admin ? "admin" : plan?.label ?? "free"}</b>
+          {!admin && plan?.id === "free" ? (
+            <> · {plan.turns} compose turns a month on Haiku · <Link href="/pro">request pro</Link></>
+          ) : (
+            <> · <Link href="/pro">plans</Link></>
+          )}
         </p>
         <ProfileForm profile={profile} />
         <AccountSettings email={user?.email ?? ""} />

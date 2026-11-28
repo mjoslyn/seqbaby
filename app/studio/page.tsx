@@ -23,7 +23,7 @@ import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
 import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel } from "@/lib/composeModels.js";
 import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
 import { FREE_COOKIE, freeBuckets, freeConfig, readFree } from "@/lib/freeCompose.js";
-import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
+import { PLAN_WINDOW_MS, effectivePlan, isAdminEmail } from "@/lib/plans.js";
 import { planRow } from "@/lib/data/admin.js";
 import { cookies } from "next/headers";
 
@@ -148,6 +148,8 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   let avatarGrid: string | null = null;
   // A paid plan (lib/plans.js) gets the model menu an unlock link gives.
   let paidModels = false;
+  // A plan with a monthly allowance (free: 50), as the compose panel shows it.
+  let accountPlan: { turns: number; left: number | null } | null = null;
   if (user) {
     const profile = await first(
       env.DB,
@@ -155,7 +157,19 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       user.id,
     ).catch(() => null);
     avatarGrid = profile?.avatar_grid ?? null;
-    paidModels = effectivePlan(await planRow(env, user.id)).models.length > 0;
+    const plan = effectivePlan(await planRow(env, user.id));
+    paidModels = plan.models.length > 0;
+    const exempt = canPickModel(user.email, env.COMPOSE_MODEL_PICKERS) || isAdminEmail(user.email, env.ADMIN_EMAILS);
+    if (plan.turns && !exempt) {
+      let left: number | null = null;
+      try {
+        const limits = env.COMPOSE_LIMITS.get(env.COMPOSE_LIMITS.idFromName(`users/${user.id}`));
+        left = await limits.freeLeft(plan.turns, PLAN_WINDOW_MS);
+      } catch {
+        left = null;
+      }
+      accountPlan = { turns: plan.turns, left };
+    }
     name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
   }
@@ -201,6 +215,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       models={models}
       unlocked={unlocked}
       free={free}
+      accountPlan={accountPlan}
       defaultModel={defaultModel}
       viewing={viewing}
     />

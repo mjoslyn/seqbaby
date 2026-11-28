@@ -20,7 +20,7 @@ import {
   readFree,
 } from "@/lib/freeCompose.js";
 import { turnstilePasses } from "@/lib/turnstile.js";
-import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
+import { PLAN_WINDOW_MS, effectivePlan, isAdminEmail } from "@/lib/plans.js";
 import { planRow } from "@/lib/data/admin.js";
 
 export const dynamic = "force-dynamic";
@@ -104,12 +104,16 @@ export async function POST(req: Request) {
   // model for an account on the deploy's list, sonnet and opus for an unlock
   // or a paid plan (lib/plans.js); anything else runs on the deploy's own.
   const plan = userId ? effectivePlan(await planRow(env, userId)) : null;
-  const model = pickedModel(body.model, allowedModels({
-    // Admins (ADMIN_EMAILS) pick from every model, as the pickers list does.
-    picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS) || isAdminEmail(user?.email, env.ADMIN_EMAILS),
+  // Admins (ADMIN_EMAILS) and the pickers list pick from every model, and no
+  // plan's model or monthly allowance applies to them.
+  const exempt = canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS) || isAdminEmail(user?.email, env.ADMIN_EMAILS);
+  const picked = pickedModel(body.model, allowedModels({
+    picker: exempt,
     unlocked: !!unlockId || (plan?.models.length ?? 0) > 0,
     defaultModel: env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL,
   }));
+  // A plan that names a model (free: Haiku) runs every turn on it.
+  const model = plan?.model && !exempt ? plan.model : picked;
 
   const id = newJobId();
   const viewToken = newSecret();
@@ -174,6 +178,24 @@ export async function POST(req: Request) {
     undo.push(() => site.dropDay(tookSite.day as string));
   }
 
+  // A plan's monthly allowance (free: 50 a rolling 30 days), counted in the
+  // account's own limits object beside its in-flight record.
+  let planLeft: number | null = null;
+  if (userId && plan?.turns && !exempt) {
+    const acct = limitsFor(`users/${userId}`);
+    const mine = await acct.takeFree(id, plan.turns, PLAN_WINDOW_MS);
+    if (mine.error) {
+      await unwind();
+      return reply({
+        error: `that's your ${plan.turns} turns this month. Request pro for more, or wait for older turns to drop off.`,
+        pro: true,
+        planLeft: 0,
+      }, 429);
+    }
+    planLeft = mine.left ?? null;
+    undo.push(() => acct.dropFree(id));
+  }
+
   // An account's own limits; an unlocked visitor's own too, by the visitor id
   // their cookie carries; a free visitor's by theirs.
   const bucket = free && freeId ? freeBuckets.visitor(freeId) : bucketFor({ userId, keyHash: null, unlockId });
@@ -206,5 +228,5 @@ export async function POST(req: Request) {
   // The view token is how the browser proves this job is its own to poll.
   // Handed back once, held in memory
   // for the life of the turn, and never stored by the browser.
-  return reply({ jobId: id, jobToken: viewToken, ...(free ? { freeLeft } : {}) }, 202);
+  return reply({ jobId: id, jobToken: viewToken, ...(free ? { freeLeft } : {}), ...(planLeft !== null ? { planLeft } : {}) }, 202);
 }

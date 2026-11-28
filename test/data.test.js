@@ -14,6 +14,7 @@ import { INLINE_MAX } from "../lib/data/blob.js";
 import * as turns from "../lib/data/composeTurns.js";
 import * as sets from "../lib/data/sets.js";
 import * as admin from "../lib/data/admin.js";
+import * as proRequests from "../lib/data/proRequests.js";
 
 async function user(env, id, email) {
   env.DB.sqlite
@@ -460,4 +461,13 @@ test("admin: an admin's writes refuse their own account, and every write is logg
   assert.equal(await admin.isSuspended(env.DB, bob), true);
   assert.equal(await admin.isSuspended(env.DB, alice), false);
   assert.deepEqual((await admin.adminLog(env)).map((l) => l.action), ["suspend", "plan"]);
+});
+
+test("pro requests: an account reads only its own request", async () => {
+  const { env, alice, bob } = await world();
+  await proRequests.requestPro(env, alice, "mine");
+  assert.equal((await proRequests.myProRequest(env, alice)).message, "mine");
+  assert.equal(await proRequests.myProRequest(env, bob), null);
+  assert.equal(await proRequests.myProRequest(env, null), null);
+  assert.equal((await proRequests.requestPro(env, null, "x")).error, "sign in first");
 });
