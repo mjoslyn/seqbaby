@@ -20,7 +20,7 @@
 import { DurableObject } from "cloudflare:workers";
 // @ts-ignore the skill file is imported as text (wrangler.jsonc `rules`)
 import guide from "../.claude/skills/compose/SKILL.md";
-import { runComposeTurn, setComposeGuide } from "../mcp/composeTurn.mjs";
+import { DEFAULT_MODEL, runComposeTurn, setComposeGuide } from "../mcp/composeTurn.mjs";
 import {
   clearSiteOutOfBudget,
   markSiteOutOfBudget,
@@ -200,12 +200,17 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
       });
     }
 
+    // Shared with the turn so a turn that fails partway still records what it spent.
+    const usage = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
+    let model: string | null = null;
     try {
       const obj = await this.env.BLOBS.get(inputKey(id));
       if (!obj) throw new Error("that job's details were no longer on the server.");
       const job = (await obj.json()) as { message: string; history: never[]; session: unknown; model?: string | null; unnamed?: boolean; canHear?: boolean };
+      model = job.model || DEFAULT_MODEL;
       const out = await runComposeTurn({
         apiKey,
+        usage,
         ...(job.model ? { model: job.model } : {}),
         message: job.message,
         history: job.history,
@@ -236,19 +241,19 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
         genre: out.genre ?? null,
         ms: out.ms,
       });
-      await this.record(id, { status: "done", model: out.model, changed: out.changed, ms: out.ms, stats: out.stats });
+      await this.record(id, { status: "done", model: out.model, changed: out.changed, ms: out.ms, stats: out.stats, usage });
     } catch (e) {
       console.error("[compose job]", e);
       // The site's key running dry switches compose off for everyone on it,
       // rather than letting each of them find out a minute into a turn.
       if (!brought && isOutOfCredit(e)) await markSiteOutOfBudget(this.env.DB).catch(() => {});
       await this.finish(id, { status: "error", error: describeTurnFailure(e, brought) });
-      await this.record(id, { status: "error" });
+      await this.record(id, { status: "error", model: model ?? undefined, usage });
     }
   }
 
   /** The turn's row in compose_turns. Its failing costs the record only. */
-  private async record(id: string, t: { status: string; model?: string; changed?: boolean; ms?: number; stats?: unknown }) {
+  private async record(id: string, t: { status: string; model?: string; changed?: boolean; ms?: number; stats?: unknown; usage?: unknown }) {
     try {
       const p = await this.ctx.storage.get<ComposeProgress>("progress");
       if (!p) return;

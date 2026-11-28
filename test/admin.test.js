@@ -95,7 +95,7 @@ test("the list searches, filters by plan and suspension, and counts", async () =
   r = await admin.listUsers(env, { suspended: true });
   assert.deepEqual(r.users.map((u) => u.id), [B]);
   const stats = await admin.adminStats(env);
-  assert.deepEqual(stats, { users: 2, new_7d: 2, paid: 1, suspended: 1, turns_7d: 0 });
+  assert.deepEqual(stats, { users: 2, new_7d: 2, paid: 1, suspended: 1, turns_7d: 0, cost_30d: 0, cost_30d_anon: 0 });
 });
 
 test("a plan or suspension on an account with no profile makes the profile, and holds", async () => {
@@ -202,4 +202,32 @@ test("a long pro message is cut to 500 characters", async () => {
   const env = await world();
   await pro.requestPro(env, B, "x".repeat(900));
   assert.equal((await pro.myProRequest(env, B)).message.length, pro.PRO_MESSAGE_MAX);
+});
+
+test("a turn's cost is priced from its tokens and summed per account", async () => {
+  const { turnCost, PRICES } = await import("../lib/composePricing.js");
+  const turns = await import("../lib/data/composeTurns.js");
+  // 1M of each on Opus 5.5: 4 + 20 + 0.2 + 5.
+  assert.equal(turnCost("claude-opus-5-5", { in: 1e6, out: 1e6, cacheRead: 1e6, cacheWrite: 1e6 }), 29.2);
+  assert.equal(turnCost("claude-haiku-5-5", { in: 20000, out: 4000 }), 0.004);
+  assert.equal(turnCost("some-other-model", { in: 1e6 }), null, "no price, no cost");
+  assert.equal(turnCost("claude-opus-5-5", null), null);
+  for (const m of ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2"]) assert.ok(PRICES[m], m);
+
+  const env = await world();
+  const usage = { in: 10000, out: 2000, cacheRead: 100000, cacheWrite: 20000 };
+  await turns.recordTurn(env.DB, { id: "job-b-1", userId: B, viewToken: "t1", status: "done", model: "claude-sonnet-5-5", usage });
+  await turns.recordTurn(env.DB, { id: "job-b-2", userId: B, viewToken: "t2", status: "error", model: "claude-sonnet-5-5", usage });
+  await turns.recordTurn(env.DB, { id: "job-anon", userId: null, viewToken: "t3", status: "done", model: "claude-haiku-5-5", usage });
+  const row = env.DB.sqlite.prepare("select tokens_in, tokens_out, cache_read, cache_write, cost_usd from compose_turns where id = 'job-b-1'").get();
+  assert.deepEqual({ ...row }, { tokens_in: 10000, tokens_out: 2000, cache_read: 100000, cache_write: 20000, cost_usd: turnCost("claude-sonnet-5-5", usage) });
+
+  const one = turnCost("claude-sonnet-5-5", usage);
+  const { users } = await admin.listUsers(env, { sort: "cost" });
+  assert.equal(users[0].id, B, "the account that spent most comes first");
+  assert.ok(Math.abs(users[0].cost_30d - 2 * one) < 1e-9, "a failed turn's spend counts too");
+  assert.equal(users[1].cost_30d, 0);
+  const stats = await admin.adminStats(env);
+  assert.ok(Math.abs(stats.cost_30d - (2 * one + turnCost("claude-haiku-5-5", usage))) < 1e-9);
+  assert.ok(Math.abs(stats.cost_30d_anon - turnCost("claude-haiku-5-5", usage)) < 1e-9);
 });

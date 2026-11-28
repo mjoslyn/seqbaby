@@ -113,7 +113,8 @@ env / fx / eq / comp / mod / automation per track.
 │                              0005_song_tags.sql: songs.tags;
 │                              0006_song_key.sql: songs.song_key;
                              0007_plans_admin.sql: plans, suspensions, admin_log;
-                             0008_pro_requests.sql: requests for pro)
+                             0008_pro_requests.sql: requests for pro;
+                             0009_turn_cost.sql: tokens and cost per compose turn)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -4771,6 +4772,15 @@ page.
   lib/auth/profile.js), or the write would do nothing.
 - Deleting from `/admin` is `deleteUserData` (lib/data/accounts.js), the
   same routine as an account deleting itself, R2 prefixes first.
+- **What compose costs, per account**: every turn's tokens (in, out, cache
+  read, cache write, the critic's included) and its price in dollars are on
+  its `compose_turns` row (migration 0009), priced when it ends by
+  `lib/composePricing.js` (`PRICES`, first-party rates; update it when prices
+  change, old rows are never repriced). A turn that fails partway still
+  records what it spent: the job hands `runComposeTurn` the `usage` object.
+  `/admin` shows the 30-day cost per account (sortable, `?sort=cost`) and in
+  total, with the signed-out share; `composeReport` sums it by model, genre
+  or kind.
 - Tests: `test/admin.test.js`, and the readers' rules in `test/data.test.js`.
 
 ## The homepage (`/`) and the studio (`/studio`)

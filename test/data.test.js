@@ -446,7 +446,7 @@ test("admin: the account list never carries a password or a session token", asyn
   for (const u of users) {
     assert.deepEqual(
       Object.keys(u).sort(),
-      ["avatar_grid", "created_at", "effective_plan", "email", "id", "last_seen", "plan", "plan_until", "songs", "suspended", "turns_30d", "username", "verified"],
+      ["avatar_grid", "cost_30d", "created_at", "effective_plan", "email", "id", "last_seen", "plan", "plan_until", "songs", "suspended", "turns_30d", "username", "verified"],
     );
   }
   assert.ok(users.some((u) => u.id === alice));

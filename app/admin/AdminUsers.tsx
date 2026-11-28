@@ -20,6 +20,7 @@ type User = {
   suspended: boolean;
   songs: number;
   turns_30d: number;
+  cost_30d: number;
   last_seen: string | null;
 };
 
@@ -39,6 +40,7 @@ export default function AdminUsers({ users, plans, me }: { users: User[]; plans:
             <th>last seen</th>
             <th>songs</th>
             <th>turns 30d</th>
+            <th>cost 30d</th>
             <th>plan</th>
             <th />
           </tr>
@@ -91,6 +93,7 @@ function Row({ u, plans, self }: { u: User; plans: { id: string; label: string }
       <td className={a.dim}>{day(u.last_seen) || "never"}</td>
       <td>{u.songs}</td>
       <td>{u.turns_30d}</td>
+      <td className={u.cost_30d ? undefined : a.dim}>${u.cost_30d.toFixed(2)}</td>
       <td>
         <div className={a.planCell}>
           <select className={styles.input} value={plan} onChange={(e) => setPlan(e.target.value)} disabled={busy} aria-label="plan">

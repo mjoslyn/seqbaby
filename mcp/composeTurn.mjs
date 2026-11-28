@@ -283,6 +283,9 @@ export async function runComposeTurn({
   // A freesound.org API key: with one, the turn can search for recorded
   // sounds and put them on sampler tracks (search_sounds, add_sound_track).
   soundsKey = /** @type {string | null} */ (null),
+  // What the turn cost, summed over its requests. The caller may hand in its
+  // own object so a turn that fails partway still says what it spent.
+  usage = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 },
   onEvent = async (_event) => {},
 }) {
   const ctx = newCtx(session, { soundsKey });
@@ -328,8 +331,6 @@ export async function runComposeTurn({
   // back readable, and how many notes it had.
   let reviewed = null;
   let criticNotes = 0;
-  // What the turn cost, summed over its rounds.
-  const usage = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   const polished = [];
   const feel = !wantsMechanical(message);
   const polish = async () => {

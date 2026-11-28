@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; plan?: string; suspended?: string; offset?: string }>;
+  searchParams: Promise<{ q?: string; plan?: string; suspended?: string; offset?: string; sort?: string }>;
 }) {
   const user = await currentUser();
   const env = await cfEnv();
@@ -28,9 +28,10 @@ export default async function AdminPage({
   const q = sp.q ?? "";
   const plan = sp.plan ?? "";
   const suspended = sp.suspended === "1";
+  const sort = sp.sort === "cost" ? "cost" : "";
   const offset = Math.max(0, Number(sp.offset) || 0);
   const [list, stats, log, requests] = await Promise.all([
-    listUsers(env, { q, plan, suspended, offset }),
+    listUsers(env, { q, plan, suspended, offset, sort }),
     adminStats(env),
     adminLog(env, 30),
     listProRequests(env, { status: "pending" }),
@@ -40,6 +41,7 @@ export default async function AdminPage({
     if (q) p.set("q", q);
     if (plan) p.set("plan", plan);
     if (suspended) p.set("suspended", "1");
+    if (sort) p.set("sort", sort);
     if (o) p.set("offset", String(o));
     const s = p.toString();
     return `/admin${s ? `?${s}` : ""}`;
@@ -61,6 +63,8 @@ export default async function AdminPage({
           <Stat n={stats.paid} label="on a paid plan" />
           <Stat n={stats.suspended} label="suspended" />
           <Stat n={stats.turns_7d} label="compose turns this week" />
+          <Stat n={stats.cost_30d} money label="compose cost, 30 days" />
+          <Stat n={stats.cost_30d_anon} money label="of it, signed out" />
         </div>
 
         <h2 className={a.h2}>pro requests{requests.length ? ` (${requests.length})` : ""}</h2>
@@ -74,6 +78,10 @@ export default async function AdminPage({
             {PLANS.map((p) => (
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}
+          </select>
+          <select className={styles.input} name="sort" defaultValue={sort} aria-label="sort">
+            <option value="">newest first</option>
+            <option value="cost">top cost, 30 days</option>
           </select>
           <label className={a.check}>
             <input type="checkbox" name="suspended" value="1" defaultChecked={suspended} /> suspended only
@@ -110,11 +118,13 @@ export default async function AdminPage({
   );
 }
 
-function Stat({ n, label }: { n: number; label: string }) {
+function Stat({ n, label, money = false }: { n: number; label: string; money?: boolean }) {
   return (
     <div className={a.stat}>
-      <div className={a.statN}>{n.toLocaleString()}</div>
+      <div className={a.statN}>{money ? usd(n) : n.toLocaleString()}</div>
       <div className={a.dim}>{label}</div>
     </div>
   );
 }
+
+const usd = (n: number) => `$${n < 100 ? n.toFixed(2) : Math.round(n).toLocaleString()}`;
