@@ -311,14 +311,15 @@ export class ComposeLimits extends DurableObject<CloudflareEnv> {
   }
 
   // A count per UTC day: an address's free turns, or the whole site's.
-  async takeDay(limit: number): Promise<{ ok?: true; error?: string }> {
+  async takeDay(limit: number): Promise<{ day?: string; error?: string }> {
     const next = takeDaily(await this.ctx.storage.get("day"), limit);
     if ("error" in next) return { error: next.error };
     await this.ctx.storage.put("day", next.rec);
-    return { ok: true };
+    return { day: next.day };
   }
 
-  async dropDay(): Promise<void> {
-    await this.ctx.storage.put("day", dropDaily(await this.ctx.storage.get("day")));
+  /** Give back a turn charged to `day`. */
+  async dropDay(day: string): Promise<void> {
+    await this.ctx.storage.put("day", dropDaily(await this.ctx.storage.get("day"), day));
   }
 }

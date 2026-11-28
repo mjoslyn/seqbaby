@@ -13,6 +13,7 @@ import * as profiles from "../lib/data/profiles.js";
 import { INLINE_MAX } from "../lib/data/blob.js";
 import * as turns from "../lib/data/composeTurns.js";
 import * as sets from "../lib/data/sets.js";
+import * as admin from "../lib/data/admin.js";
 
 async function user(env, id, email) {
   env.DB.sqlite
@@ -433,4 +434,30 @@ test("a song's tags are its owner's to set, normalized, and travel with a remix"
   assert.deepEqual(named.tags, ["lo-fi"]);
   const remix = await songs.remixSong(env, bob, named.id);
   assert.deepEqual((await list(bob)).find((s) => s.id === remix.id).tags, ["lo-fi"]);
+});
+
+// The admin readers read across every account, so the rule is the caller's
+// (ADMIN_EMAILS, app/admin): these hold what each one reveals and refuses.
+test("admin: the account list never carries a password or a session token", async () => {
+  const { env, alice } = await world();
+  const { users } = await admin.listUsers(env, {});
+  assert.equal(users.length, 2);
+  for (const u of users) {
+    assert.deepEqual(
+      Object.keys(u).sort(),
+      ["avatar_grid", "created_at", "effective_plan", "email", "id", "last_seen", "plan", "plan_until", "songs", "suspended", "turns_30d", "username", "verified"],
+    );
+  }
+  assert.ok(users.some((u) => u.id === alice));
+});
+
+test("admin: an admin's writes refuse their own account, and every write is logged", async () => {
+  const { env, alice, bob } = await world();
+  assert.ok((await admin.setSuspended(env, alice, alice, true)).error);
+  assert.ok((await admin.deleteUser(env, alice, alice)).error);
+  assert.ok((await admin.setPlan(env, alice, bob, "pro")).ok);
+  assert.ok((await admin.setSuspended(env, alice, bob, true)).ok);
+  assert.equal(await admin.isSuspended(env.DB, bob), true);
+  assert.equal(await admin.isSuspended(env.DB, alice), false);
+  assert.deepEqual((await admin.adminLog(env)).map((l) => l.action), ["suspend", "plan"]);
 });

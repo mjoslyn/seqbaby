@@ -73,10 +73,12 @@ test("a daily count stops at its limit, gives back, and starts over the next UTC
   for (let i = 0; i < 3; i++) rec = takeDaily(rec, 3, t0).rec;
   assert.deepEqual(rec, { day: "2026-11-28", n: 3 });
   assert.deepEqual(takeDaily(rec, 3, t0), { error: "limit" });
-  rec = dropDaily(rec, t0);
+  rec = dropDaily(rec, "2026-11-28");
   assert.equal(rec.n, 2);
   assert.ok(!("error" in takeDaily(rec, 3, t0)));
+  assert.equal(takeDaily(null, 3, t0).day, "2026-11-28");
   assert.deepEqual(takeDaily({ day: "2026-11-28", n: 3 }, 3, t0 + DAY).rec, { day: "2026-11-29", n: 1 });
-  assert.deepEqual(dropDaily({ day: "2026-11-27", n: 5 }, t0), { day: "2026-11-27", n: 5 }, "yesterday's count is left alone");
-  assert.deepEqual(dropDaily({ day: "2026-11-28", n: 0 }, t0), { day: "2026-11-28", n: 0 });
+  assert.deepEqual(dropDaily({ day: "2026-11-27", n: 5 }, "2026-11-28"), { day: "2026-11-27", n: 5 }, "another day's count is left alone");
+  assert.deepEqual(dropDaily({ day: "2026-11-28", n: 0 }, "2026-11-28"), { day: "2026-11-28", n: 0 });
+  assert.deepEqual(takeDaily(null, 0, t0), { error: "limit" }, "a cap of 0 allows none");
 });

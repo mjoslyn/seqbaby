@@ -154,20 +154,24 @@ export async function POST(req: Request) {
     }
     freeLeft = mine.left ?? null;
     undo.push(() => visitor.dropFree(id));
-    if (ip && free.ipPerDay > 0) {
+    // An address is only known behind Cloudflare (cf-connecting-ip); a
+    // request without one (local dev) is counted by the visitor and the site.
+    if (ip) {
       const addr = limitsFor(freeBuckets.ip(await hashIp(ip, free.secret)));
-      if ((await addr.takeDay(free.ipPerDay)).error) {
+      const took = await addr.takeDay(free.ipPerDay);
+      if (took.error) {
         await unwind();
         return reply({ error: freeLimitMessage("ip", free), signup: true }, 429);
       }
-      undo.push(() => addr.dropDay());
+      undo.push(() => addr.dropDay(took.day as string));
     }
     const site = limitsFor(freeBuckets.site());
-    if ((await site.takeDay(free.sitePerDay)).error) {
+    const tookSite = await site.takeDay(free.sitePerDay);
+    if (tookSite.error) {
       await unwind();
       return reply({ error: freeLimitMessage("site", free), signup: true }, 429);
     }
-    undo.push(() => site.dropDay());
+    undo.push(() => site.dropDay(tookSite.day as string));
   }
 
   // An account's own limits; an unlocked visitor's own too, by the visitor id

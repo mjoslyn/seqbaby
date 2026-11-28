@@ -455,8 +455,11 @@ export default function ComposeChat({
   const [checkToken, setCheckToken] = useState("");
   // Bumped to draw a fresh widget when a token was refused (each is single use).
   const [checkRound, setCheckRound] = useState(0);
+  // The server wants a robot check but this build has no site key to draw
+  // one with: free compose cannot work here, and the panel says so.
+  const [checkMissing, setCheckMissing] = useState(!!free?.check && !TURNSTILE_SITE_KEY);
   const freeOut = isFree && freeLeft === 0;
-  const freeBlocked = isFree && (freeOut || (needCheck && !checkToken));
+  const freeBlocked = isFree && (freeOut || checkMissing || (needCheck && !checkToken));
   const modelIds = models.map((m) => m.id).join(",");
   const [model, setModel] = useState(defaultModel);
   useEffect(() => {
@@ -569,8 +572,11 @@ export default function ComposeChat({
     if (r.check) {
       setCheckToken("");
       setNeedCheck(!!TURNSTILE_SITE_KEY);
+      setCheckMissing(!TURNSTILE_SITE_KEY);
       setCheckRound((n) => n + 1);
-    } else if (ok) {
+    } else {
+      // Any answer but "check first" means the check passed (or was never
+      // needed) and the cookie it earned is set, even on a refusal after it.
       setNeedCheck(false);
       setCheckToken("");
     }
@@ -1224,6 +1230,7 @@ export default function ComposeChat({
               turns={free!.turns}
               left={freeLeft}
               check={needCheck}
+              missing={checkMissing}
               onToken={setCheckToken}
             />
           )}
@@ -1466,11 +1473,14 @@ function FreeStrip({
   turns,
   left,
   check,
+  missing,
   onToken,
 }: {
   turns: number;
   left: number | null;
   check: boolean;
+  /** The server asks for a robot check this build cannot draw. */
+  missing: boolean;
   onToken: (t: string) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -1524,6 +1534,9 @@ function FreeStrip({
           {n === 0 ? "make an account to keep going" : "make an account for more"}
         </button>
       </div>
+      {missing && n > 0 && (
+        <div className={styles.cxFreeHint}>free composing isn&apos;t set up on this site yet: make an account to compose.</div>
+      )}
       {check && TURNSTILE_SITE_KEY && n > 0 && (
         <>
           <div className={styles.cxFreeHint}>one quick check before your first song:</div>

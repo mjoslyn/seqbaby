@@ -4750,12 +4750,14 @@ page.
   unlock does). Admins get every model on `COMPOSE_MODELS` (haiku, sonnet,
   opus, fable), as an account on `COMPOSE_MODEL_PICKERS` does.
 - **Suspended** (`profiles.suspended`) deletes the account's sessions, and
-  the auth config's `session.create.before` hook (`isSuspended`,
-  lib/auth/config.js) refuses a new one. A cookie-cached session lasts at
-  most the cache's five minutes.
+  the auth config's `session.create.before` hook refuses a new one
+  (`isSuspended`, lib/data/admin.js). A cookie-cached session lasts at most
+  the cache's five minutes. A plan or a suspension on an account whose
+  profile was never made makes it first (`createProfile`,
+  lib/auth/profile.js), or the write would do nothing.
 - Deleting from `/admin` is `deleteUserData` (lib/data/accounts.js), the
   same routine as an account deleting itself, R2 prefixes first.
-- Tests: `test/admin.test.js`.
+- Tests: `test/admin.test.js`, and the readers' rules in `test/data.test.js`.
 
 ## The homepage (`/`) and the studio (`/studio`)
 

@@ -92,6 +92,15 @@ test("the list searches, filters by plan and suspension, and counts", async () =
   assert.deepEqual(stats, { users: 2, new_7d: 2, paid: 1, suspended: 1, turns_7d: 0 });
 });
 
+test("a plan or suspension on an account with no profile makes the profile, and holds", async () => {
+  const env = await world();
+  env.DB.sqlite.prepare(`delete from profiles where id = ?`).run(B);
+  assert.ok((await admin.setSuspended(env, A, B, true)).ok);
+  assert.equal(await admin.isSuspended(env.DB, B), true);
+  assert.ok((await admin.setPlan(env, A, B, "pro")).ok);
+  assert.equal((await admin.planRow(env, B)).plan, "pro");
+});
+
 test("an admin cannot suspend or delete their own account", async () => {
   const env = await world();
   assert.match((await admin.setSuspended(env, A, A, true)).error, /own account/);

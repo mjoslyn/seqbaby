@@ -24,7 +24,8 @@ interface CloudflareEnv {
   /** Free compose with no account (lib/freeCompose.js): turns per visitor per
    *  window (default 10, "0" switches it off), the window in days (30), turns
    *  per IP per day (20), turns for the whole site per day (2000), and the
-   *  secret the visitor cookie is signed with (else BETTER_AUTH_SECRET). */
+   *  secret the visitor cookie is signed with (else BETTER_AUTH_SECRET).
+   *  A daily cap of 0 allows no free turns at all; it never means "no cap". */
   COMPOSE_FREE_TURNS?: string;
   COMPOSE_FREE_WINDOW_DAYS?: string;
   COMPOSE_FREE_IP_PER_DAY?: string;

@@ -24,6 +24,7 @@ import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel } from "@/lib/compos
 import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
 import { FREE_COOKIE, freeBuckets, freeConfig, readFree } from "@/lib/freeCompose.js";
 import { effectivePlan, isAdminEmail } from "@/lib/plans.js";
+import { planRow } from "@/lib/data/admin.js";
 import { cookies } from "next/headers";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -150,11 +151,11 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   if (user) {
     const profile = await first(
       env.DB,
-      "select display_name, username, avatar_grid, plan, plan_until from profiles where id = ?1",
+      "select display_name, username, avatar_grid from profiles where id = ?1",
       user.id,
     ).catch(() => null);
     avatarGrid = profile?.avatar_grid ?? null;
-    paidModels = effectivePlan(profile).models.length > 0;
+    paidModels = effectivePlan(await planRow(env, user.id)).models.length > 0;
     name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
   }
