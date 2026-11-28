@@ -191,6 +191,22 @@ export const MORE_PLANS = {
     moves: ["euclid rings on the toms, one added each section", "one tom ring rotated a step each section so the accents walk", "percussion with its randomizer up so no two strikes match", "[vox] a two-note chant rising under the drums, a long dark reverb on a bus", "the bed's filter opening over sixteen bars"],
     avoid: ["bright hats in front", "chord changes", "a dry mix"],
   },
+  "noise-techno": {
+    swing: [0, 0.04], kits: ["synth", "techno", "siege-909"],
+    drums: [
+      { kick: FOUR, hat: OFF, clap: "....x.......x..." },
+      { kick: FOUR, hat: "x.ox..oxx.ox..ox", snare: "............X..." },
+      { kick: "x...x...x...x.x.", hat: S16, perc: "..x....x..x....x" },
+    ],
+    core: { line: ["dm:silverbox", "dm:contagion", "dm:snarl", "dm:sub/acid"], noise: ["dm:drone/screamer", "dm:drone/bit swarm", "plaits:9"] },
+    optional: { arp: ["dm:oracle/pulse keys", "dm:hexop/bell", "dm:drift"], bed: ["dm:drone/machine hum", "dm:drone/dark grone"], bass: ["dm:sub/distorted 808", "dm:sub/growl"], metal: ["dm:halo/trash", "dm:lancet/metal fm"] },
+    extras: [1, 3],
+    bass: ["a squelching sixteenth line with accents and slides `X.xxx.X.xx.xX.x.`, fuzz on it", "a two-note riff hammered on the offbeats `..x...X...x...X.`, crushed", "a long acid phrase that ties across the bar `x__.x.x__.xx.x__`, torn by fuzz"],
+    harmony: ["minor: one root, the line wandering the scale", "phrygian: root and b2, grinding", "minor pentatonic: a rough riff, no chords", "chromatic: the line as pure noise and squelch"],
+    angles: ["rough and lo-fi: saturation, cassette or crush on something", "peak energy: dense drums, everything forward", "hypnotic: one idea that barely changes while the sound around it moves"],
+    moves: ["the master's drive and glue pushed up so the whole mix pumps and breaks up", "fuzz, crush and cassette on the line until it tears", "a section that collapses into the noise alone, the kick punching back in", "the noise track's cutoff and level on lanes, swelling across eight bars", "[arp] a bright arp buried under the noise that surfaces once near the end", "[metal] crushed metal hits with every randomizer up"],
+    avoid: ["a clean polished mix", "a drop that resets to silence", "swing"],
+  },
   ebm: {
     swing: [0, 0.03], kits: ["synth", "909", "siege-909"],
     drums: [
